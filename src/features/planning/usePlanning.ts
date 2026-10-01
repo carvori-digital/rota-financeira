@@ -1,0 +1,12 @@
+import { useCallback,useEffect,useRef,useState } from 'react';
+import { emptyPlanning } from './types';
+import type { PlanningData } from './types';
+import { loadPlanning } from './queries';
+export function usePlanning(user: string|undefined) {
+ const [snapshot,setSnapshot]=useState<{owner:string|undefined;data:PlanningData}>({owner:undefined,data:emptyPlanning});
+ const [loading,setLoading]=useState(false),[error,setError]=useState('');const generation=useRef(0);
+ const refresh=useCallback(async()=>{const run=++generation.current; if(!user){setSnapshot({owner:user,data:emptyPlanning});setLoading(false);setError('');return;}setLoading(true);setError('');try {const data=await loadPlanning(user);if(run===generation.current)setSnapshot({owner:user,data});}catch {if(run===generation.current){setSnapshot({owner:user,data:emptyPlanning});setError('Não foi possível carregar o planejamento. Confira a conexão e a migration V0.2.');}}finally{if(run===generation.current)setLoading(false);}},[user]);
+ useEffect(()=>{void refresh();return()=>{++generation.current;};},[refresh]);
+ useEffect(()=>{const visible=()=>{if(document.visibilityState==='visible')void refresh();};window.addEventListener('online',visible);document.addEventListener('visibilitychange',visible);return()=>{window.removeEventListener('online',visible);document.removeEventListener('visibilitychange',visible);};},[refresh]);
+ return {data:snapshot.owner===user?snapshot.data:emptyPlanning,loading:loading||snapshot.owner!==user,error,refresh};
+}

@@ -3,6 +3,13 @@ import type { FormEvent, ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { useFinance } from "./hooks/useFinance";
+import { usePlanning } from './features/planning/usePlanning';
+import { HomeClarity } from './features/planning/HomeClarity';
+import { PlanningWorkspace } from './features/planning/PlanningWorkspace';
+import type { PlanningAction } from './features/planning/PlanningWorkspace';
+import { QuickActions } from './features/planning/ui';
+import { realized } from './features/planning/calculations';
+import { rpc } from './features/planning/queries';
 import type { Account, Category, Goal, Transaction, Table } from "./types";
 import {
   balance,
@@ -19,7 +26,7 @@ import {
 type Editor =
   | { kind: "account"; row?: Account }
   | { kind: "category"; row?: Category }
-  | { kind: "transaction"; row?: Transaction }
+  | { kind: "transaction"; row?: Transaction; initialType?: 'income'|'expense'|'transfer'; accountId?: string }
   | { kind: "goal"; row?: Goal }
   | { kind: "contribution"; goal: Goal };
 const labels = {
@@ -85,9 +92,17 @@ export default function App() {
   const [recovery, setRecovery] = useState(false);
   const [page, setPage] = useState("home");
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [quick, setQuick] = useState(false);
+  const [planningAction,setPlanningAction] = useState<PlanningAction|null>(null);
+  const lastAccount=useRef<string>('');
   const [notice, setNotice] = useState("");
   const [operation, setOperation] = useState(false);
-  const { data, loading, error, refresh } = useFinance(session?.user.id);
+  const finance = useFinance(session?.user.id);
+  const planning = usePlanning(session?.user.id);
+  const { data }=finance;
+  const loading=finance.loading||planning.loading;
+  const error=finance.error||planning.error;
+  async function refresh() { await Promise.all([finance.refresh(),planning.refresh()]); }
   const [month, setMonth] = useState(today().slice(0, 7));
   const [historyMonth, setHistoryMonth] = useState(today().slice(0, 7));
   const [filterAccount, setFilterAccount] = useState("");
@@ -104,6 +119,7 @@ export default function App() {
         if (event === "PASSWORD_RECOVERY") setRecovery(true);
         if (!next) {
           setEditor(null);
+          setQuick(false);setPlanningAction(null);lastAccount.current='';
           setPage("home");
           setNotice("");
         }
@@ -141,7 +157,8 @@ export default function App() {
         onRecovered={() => setRecovery(false)}
       />
     );
-  const totals = monthly(data.transactions, month);
+  const actual=realized(data.transactions,planning.data.card_purchases,month,today());
+  const totals={...actual,result:actual.income-actual.expense,saved:actual.income>0?(actual.income-actual.expense)*100/actual.income:null};
   const balances = balanceSummary(data.accounts, data.transactions);
   const reserveAccounts = data.accounts.filter(isReserveAccount);
   const sorted = [...data.transactions].sort(
@@ -161,10 +178,11 @@ export default function App() {
         .filter(
           (t) =>
             t.type === "expense" &&
+            t.transaction_date <= today() &&
             t.category_id === c.id &&
             t.transaction_date.startsWith(month),
         )
-        .reduce((sum, t) => sum + t.amount_cents, 0),
+        .reduce((sum, t) => sum + t.amount_cents, 0) + planning.data.card_purchases.filter(p=>p.category_id===c.id && p.purchase_date<=today()&&p.purchase_date.startsWith(month)).reduce((s,p)=>s+p.amount_cents,0),
     }))
     .filter((c) => c.cents > 0)
     .sort((a, b) => b.cents - a.cents);
@@ -243,7 +261,7 @@ export default function App() {
             {t.type === "transfer"
               ? ` → ${accountName(t.destination_account_id)}`
               : ` · ${categoryName(t.category_id)}`}
-            {t.is_recurring ? " · Recorrente" : ""}
+            {t.is_recurring ? " · Recorrente" : ""} · {t.transaction_date>today()?'PREVISTO':'REALIZADO'}
           </small>
         </div>
         <div className="row-end">
@@ -252,8 +270,8 @@ export default function App() {
               (t.type === "expense" ? "−" : t.type === "income" ? "+" : "")}
             {money(t.amount_cents)}
           </strong>
-          <small>{labels[t.type]}</small>
-          <div className="actions">
+          <small>{t.type==='card_payment'?'Pagamento de fatura':labels[t.type]}</small>
+          {!t.payment_reference && <div className="actions">
             <button onClick={() => setEditor({ kind: "transaction", row: t })}>
               Editar
             </button>
@@ -263,14 +281,14 @@ export default function App() {
             >
               Excluir
             </button>
-          </div>
+          </div>}
         </div>
       </div>
     ));
   }
   function goals(limit?: number) {
     return data.goals
-      .filter((g) => page === "goals" || g.is_active)
+      .filter((g) => !g.is_emergency_reserve && (page === "goals" || g.is_active))
       .slice(0, limit)
       .map((g) => {
         const p = goalProgress(g, data.goal_contributions);
@@ -400,25 +418,9 @@ export default function App() {
               <>
                 <div className="eyebrow">SEU DINHEIRO, COM DIREÇÃO</div>
                 <h1>Um passo de cada vez.</h1>
-                <section className="balance">
-                  <span>Saldo disponível</span>
-                  <h2>{money(balances.available)}</h2>
-                  <div className="balance-secondary">
-                    <div>
-                      Investimentos e reserva{" "}
-                      <strong>{money(balances.reserve)}</strong>
-                    </div>
-                    <div>
-                      Patrimônio total <strong>{money(balances.total)}</strong>
-                    </div>
-                  </div>
-                  <small>Inclui contas arquivadas · lançamentos até hoje</small>
-                  <button onClick={() => setEditor({ kind: "transaction" })}>
-                    + Nova movimentação
-                  </button>
-                </section>
+                <HomeClarity data={data} plan={planning.data} money={money} onPlan={()=>setPage('planning')} onNew={()=>setQuick(true)}/>
                 <div className="section-heading">
-                  <h2>Seu mês</h2>
+                  <h2>Seu mês · realizado</h2>
                   <input
                     aria-label="Mês do resumo"
                     type="month"
@@ -561,7 +563,7 @@ export default function App() {
                 </div>
                 <button
                   className="primary"
-                  onClick={() => setEditor({ kind: "transaction" })}
+                  onClick={() => setQuick(true)}
                 >
                   + Adicionar
                 </button>
@@ -718,7 +720,7 @@ export default function App() {
                 >
                   Sair da conta
                 </button>
-                <small className="muted">Rota Financeira · v0.1</small>
+                <small className="muted">Rota Financeira · v0.2</small>
               </>
             )}
           </div>
@@ -729,36 +731,36 @@ export default function App() {
           ["home", "⌂", "Início"],
           ["history", "↕", "Movimentações"],
           ["add", "+", "Adicionar"],
-          ["investments", "◇", "Reserva"],
+          ["planning", "◇", "Planejar"],
           ["goals", "◎", "Objetivos"],
           ["settings", "☷", "Ajustes"],
         ].map(([id, icon, label]) => (
           <button
             key={id}
-            aria-label={
-              id === "investments" ? "Investimentos e Reserva" : label
-            }
+            aria-label={label}
             aria-current={page === id ? "page" : undefined}
             disabled={id === "add" && (loading || !!error)}
             className={`${page === id ? "selected" : ""} ${id === "add" ? "add" : ""}`}
             onClick={() =>
-              id === "add" ? setEditor({ kind: "transaction" }) : setPage(id)
+              id === "add" ? setQuick(true) : setPage(id)
             }
           >
             <span aria-hidden="true">{icon}</span>
             <small>
-              {id === "history" ? "Movimentos" : id === "add" ? "Novo" : label}
+              {id === "history" ? "Movimentos" : id === "add" ? "Novo" : id==='goals'?'Metas':label}
             </small>
           </button>
         ))}
       </nav>
       {editor && (
         <EditorForm
+          key={`${editor.kind}:${'row' in editor?editor.row?.id??'new':'new'}`}
           editor={editor}
           valuesHidden={valuesHidden}
           data={data}
           onClose={() => setEditor(null)}
-          onSaved={async () => {
+          onSaved={async (accountId?:string) => {
+            if(accountId)lastAccount.current=accountId;
             setEditor(null);
             await refresh();
             setNotice(
@@ -767,6 +769,8 @@ export default function App() {
           }}
         />
       )}
+      {!error&&!loading&&<div className={page==='planning'?'planning-container':'planning-hidden'}><PlanningWorkspace data={data} plan={planning.data} money={money} hidden={valuesHidden} visible={page==='planning'} action={planningAction} setAction={setPlanningAction} onSaved={async()=>{await refresh();setNotice('Salvo com sucesso. Planejamento atualizado.');}}/></div>}
+      {quick&&<QuickActions onClose={()=>setQuick(false)} onSelect={kind=>{setQuick(false);if(['income','expense','transfer'].includes(kind))setEditor({kind:'transaction',initialType:kind as 'income'|'expense'|'transfer',accountId:lastAccount.current});else if(kind==='contribution'){setPage('goals');setNotice('Escolha + Aporte na meta desejada. Para mover dinheiro entre contas, use Transferência.');}else setPlanningAction({kind:kind as 'purchase'|'debtPayment'});}}/>}
     </div>
   );
 }

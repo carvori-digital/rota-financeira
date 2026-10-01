@@ -1,4 +1,4 @@
-export type Kind = "income" | "expense" | "transfer";
+export type Kind = "income" | "expense" | "transfer" | "card_payment";
 export interface Base {
   id: string;
   user_id: string;
@@ -16,6 +16,7 @@ export interface Category extends Base {
   type: "income" | "expense";
 }
 export interface Transaction extends Base {
+  payment_reference?: 'card' | 'debt' | null;
   account_id: string;
   destination_account_id: string | null;
   category_id: string | null;
@@ -27,6 +28,9 @@ export interface Transaction extends Base {
   recurrence_frequency: string | null;
 }
 export interface Goal extends Base {
+  essential_monthly_cents?: number | null;
+  reserve_months?: number | null;
+  is_emergency_reserve?: boolean;
   name: string;
   target_amount_cents: number;
   initial_amount_cents: number;
