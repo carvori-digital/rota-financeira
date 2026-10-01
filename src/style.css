@@ -555,3 +555,28 @@ code {
     scroll-behavior: auto;
   }
 }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.values-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+.balance-secondary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+.balance-secondary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}

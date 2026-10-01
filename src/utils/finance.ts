@@ -49,6 +49,26 @@ export function balance(
       account.initial_balance_cents,
     );
 }
+export function isReserveAccount(account: Account) {
+  return account.type === "savings" || account.type === "investment";
+}
+export function balanceSummary(
+  accounts: Account[],
+  transactions: Transaction[],
+  cutoff = today(),
+) {
+  return accounts.reduce(
+    (totals, account) => {
+      const cents = balance(account, transactions, cutoff);
+      totals.total += cents;
+      if (isReserveAccount(account)) totals.reserve += cents;
+      else if (["checking", "wallet", "other"].includes(account.type))
+        totals.available += cents;
+      return totals;
+    },
+    { available: 0, reserve: 0, total: 0 },
+  );
+}
 export function monthly(transactions: Transaction[], month: string) {
   const rows = transactions.filter((t) => t.transaction_date.startsWith(month));
   const income = rows

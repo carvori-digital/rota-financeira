@@ -14,6 +14,7 @@ import { act } from "react";
 import { today } from "../src/utils/finance";
 
 type Row = Record<string, unknown>;
+declare const jsdom: { window: { localStorage: Storage } };
 const backend = vi.hoisted(() => ({
   rows: {} as Record<string, Row[]>,
   writes: [] as Row[],
@@ -145,6 +146,8 @@ vi.mock("../src/lib/supabase", () => ({
   },
 }));
 beforeAll(() => {
+  // Node 25 exposes its own storage; use the real jsdom browser implementation.
+  vi.stubGlobal("localStorage", jsdom.window.localStorage);
   HTMLDialogElement.prototype.showModal = function () {
     this.setAttribute("open", "");
   };
@@ -153,6 +156,7 @@ beforeAll(() => {
   };
 });
 beforeEach(() => {
+  window.localStorage.clear();
   backend.session = { user: { id: "user-a", email: "teste@example.com" } };
   backend.readError = false;
   backend.writeError = false;
@@ -188,7 +192,7 @@ beforeEach(() => {
 afterEach(cleanup);
 async function open() {
   render(<App />);
-  await screen.findByText("Saldo total hoje");
+  await screen.findByText("Saldo disponível");
   return userEvent.setup();
 }
 describe("fluxos reais da interface com Supabase isolado de teste", () => {
@@ -226,7 +230,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Salvar senha", exact: true }),
     );
-    await screen.findByText("Saldo total hoje");
+    await screen.findByText("Saldo disponível");
     expect(backend.authCalls[2]).toMatchObject({
       kind: "password",
       payload: { password: "new-fixture-password" },
@@ -373,7 +377,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     backend.readError = true;
     render(<App />);
     await screen.findByRole("alert");
-    expect(screen.queryByText("Saldo total hoje")).toBeNull();
+    expect(screen.queryByText("Saldo disponível")).toBeNull();
     expect(
       screen
         .getByRole("button", { name: "Adicionar", exact: true })
@@ -434,6 +438,203 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Entrar", exact: true }),
     );
-    await screen.findByText("Saldo total hoje");
+    await screen.findByText("Saldo disponível");
+  });
+});
+
+describe("disponível, reserva e privacidade", () => {
+  function fixtures() {
+    backend.rows.accounts.push(
+      {
+        id: "s",
+        name: "Poupança fixture",
+        type: "savings",
+        initial_balance_cents: 20000,
+        is_active: false,
+      },
+      {
+        id: "i",
+        name: "Investimento fixture",
+        type: "investment",
+        initial_balance_cents: 30000,
+        is_active: true,
+      },
+    );
+    backend.rows.goals = [
+      {
+        id: "g",
+        name: "Meta fixture",
+        target_amount_cents: 100000,
+        initial_amount_cents: 10000,
+        is_active: true,
+      },
+    ];
+    backend.rows.goal_contributions = [
+      {
+        id: "c1",
+        goal_id: "g",
+        amount_cents: 5000,
+        contribution_date: today(),
+        description: "Aporte fixture",
+      },
+    ];
+    backend.rows.transactions = [
+      {
+        id: "t",
+        account_id: "a",
+        destination_account_id: null,
+        category_id: "d",
+        type: "income",
+        amount_cents: 1000,
+        description: "Receita fixture",
+        transaction_date: today(),
+        is_recurring: false,
+        created_at: "",
+      },
+    ];
+  }
+  it("Home e página própria distinguem localização de metas e recalculam transferência", async () => {
+    fixtures();
+    const user = await open();
+    expect(
+      screen.getByText("Saldo disponível").parentElement?.querySelector("h2")
+        ?.textContent,
+    ).toMatch(/110,00/);
+    expect(screen.getByText("Patrimônio total").textContent).toMatch(/610,00/);
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Transferência", exact: true }),
+    );
+    await user.type(screen.getByLabelText("Valor (R$)"), "25");
+    await user.selectOptions(screen.getByLabelText("Conta de destino"), "i");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByText(/Salvo com sucesso/);
+    expect(
+      screen.getByText("Saldo disponível").parentElement?.querySelector("h2")
+        ?.textContent,
+    ).toMatch(/85,00/);
+    expect(screen.getByText("Investimentos e reserva").textContent).toMatch(
+      /525,00/,
+    );
+    expect(screen.getByText("Patrimônio total").textContent).toMatch(/610,00/);
+    await user.click(
+      screen.getByRole("button", {
+        name: "Investimentos e Reserva",
+        exact: true,
+      }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Investimentos e Reserva" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Poupança fixture")).toBeTruthy();
+    expect(screen.getByText("Investimento fixture")).toBeTruthy();
+    expect(screen.queryByText("Principal")).toBeNull();
+    expect(screen.queryByText("Meta fixture")).toBeNull();
+    expect(
+      screen
+        .getByText("Total em investimentos e reserva")
+        .parentElement?.querySelector("h2")?.textContent,
+    ).toMatch(/525,00/);
+  });
+  it("oculta todas as páginas e inputs, preserva edição e salva só a preferência", async () => {
+    fixtures();
+    const user = await open();
+    await user.click(screen.getByRole("button", { name: "Ocultar valores" }));
+    expect(window.localStorage.length).toBe(1);
+    expect(window.localStorage.getItem("rota-financeira:values-hidden")).toBe(
+      "true",
+    );
+    expect(document.body.textContent).not.toMatch(/R\$/);
+    expect(document.querySelector("progress")).toBeNull();
+    for (const page of [
+      "Investimentos e Reserva",
+      "Movimentações",
+      "Objetivos",
+      "Ajustes",
+    ]) {
+      await user.click(screen.getByRole("button", { name: page, exact: true }));
+      expect(document.body.textContent).not.toMatch(/R\$/);
+      expect(document.body.textContent).not.toMatch(/\d+%/);
+    }
+    await user.click(
+      screen.getAllByRole("button", { name: "Editar", exact: true })[0],
+    );
+    const initial = screen.getByLabelText(
+      "Saldo inicial (R$)",
+    ) as HTMLInputElement;
+    expect(initial.type).toBe("password");
+    expect(initial.value).toBe("100,00");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByText(/Salvo com sucesso/);
+    expect(backend.rows.accounts[0].initial_balance_cents).toBe(10000);
+    await user.click(
+      screen.getByRole("button", { name: "Movimentações", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Editar", exact: true }),
+    );
+    expect((screen.getByLabelText("Valor (R$)") as HTMLInputElement).type).toBe(
+      "password",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Objetivos", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Editar", exact: true }),
+    );
+    for (const label of ["Meta (R$)", "Já acumulado (R$)"])
+      expect((screen.getByLabelText(label) as HTMLInputElement).type).toBe(
+        "password",
+      );
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "+ Aporte", exact: true }),
+    );
+    expect((screen.getByLabelText("Valor (R$)") as HTMLInputElement).type).toBe(
+      "password",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    cleanup();
+    render(<App />);
+    await screen.findByText("Saldo disponível");
+    expect(screen.getByRole("button", { name: "Exibir valores" })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/R\$/);
+    await user.click(screen.getByRole("button", { name: "Exibir valores" }));
+    expect(document.body.textContent).toMatch(/R\$/);
+    expect(document.querySelector("progress")).not.toBeNull();
+    expect(window.localStorage.length).toBe(1);
+    expect(window.localStorage.getItem("rota-financeira:values-hidden")).toBe(
+      "false",
+    );
+  });
+  it("continua ocultando quando o navegador bloqueia gravação de preferência", async () => {
+    const user = await open();
+    const storage = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("blocked");
+      });
+    try {
+      await user.click(screen.getByRole("button", { name: "Ocultar valores" }));
+      expect(document.body.textContent).not.toMatch(/R\$/);
+      expect(
+        screen.getByRole("button", { name: "Exibir valores" }),
+      ).toBeTruthy();
+    } finally {
+      storage.mockRestore();
+    }
   });
 });

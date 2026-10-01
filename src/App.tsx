@@ -6,10 +6,12 @@ import { useFinance } from "./hooks/useFinance";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
 import {
   balance,
+  balanceSummary,
+  isReserveAccount,
   displayDate,
   goalProgress,
   inputMoney,
-  money,
+  money as formatMoney,
   monthly,
   parseMoney,
   today,
@@ -52,6 +54,28 @@ function explain(error: unknown) {
   return "Não foi possível salvar. Verifique a conexão e tente novamente.";
 }
 export default function App() {
+  const [valuesHidden, setValuesHidden] = useState(() => {
+    try {
+      return (
+        window.localStorage.getItem("rota-financeira:values-hidden") === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+  function toggleValues() {
+    const next = !valuesHidden;
+    setValuesHidden(next);
+    try {
+      window.localStorage.setItem(
+        "rota-financeira:values-hidden",
+        String(next),
+      );
+    } catch {
+      // The toggle still works when browser storage is unavailable.
+    }
+  }
+  const money = (cents: number) => (valuesHidden ? "••••" : formatMoney(cents));
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [recovery, setRecovery] = useState(false);
@@ -114,10 +138,8 @@ export default function App() {
       />
     );
   const totals = monthly(data.transactions, month);
-  const totalBalance = data.accounts.reduce(
-    (s, a) => s + balance(a, data.transactions),
-    0,
-  );
+  const balances = balanceSummary(data.accounts, data.transactions);
+  const reserveAccounts = data.accounts.filter(isReserveAccount);
   const sorted = [...data.transactions].sort(
     (a, b) =>
       b.transaction_date.localeCompare(a.transaction_date) ||
@@ -222,7 +244,8 @@ export default function App() {
         </div>
         <div className="row-end">
           <strong className={t.type}>
-            {t.type === "expense" ? "−" : t.type === "income" ? "+" : ""}
+            {!valuesHidden &&
+              (t.type === "expense" ? "−" : t.type === "income" ? "+" : "")}
             {money(t.amount_cents)}
           </strong>
           <small>{labels[t.type]}</small>
@@ -254,9 +277,11 @@ export default function App() {
                 {g.name}
                 {!g.is_active && " · Arquivado"}
               </h3>
-              <span>{Math.round(p.percent)}%</span>
+              <span>{valuesHidden ? "••••" : `${Math.round(p.percent)}%`}</span>
             </div>
-            <progress max="100" value={Math.min(100, p.percent)} />
+            {!valuesHidden && (
+              <progress max="100" value={Math.min(100, p.percent)} />
+            )}
             <p>
               <strong>{money(p.accumulated)}</strong>
               <span className="muted"> de {money(g.target_amount_cents)}</span>
@@ -310,13 +335,35 @@ export default function App() {
     <div className="shell">
       <header>
         <Brand />
-        <button
-          className="avatar"
-          onClick={() => setPage("settings")}
-          aria-label="Abrir ajustes"
-        >
-          {session.user.email?.slice(0, 1).toUpperCase()}
-        </button>
+        <div className="header-actions">
+          <button
+            className="values-toggle"
+            onClick={toggleValues}
+            aria-label={valuesHidden ? "Exibir valores" : "Ocultar valores"}
+            aria-pressed={valuesHidden}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" />
+              {valuesHidden && <path d="m3 3 18 18" />}
+            </svg>
+          </button>
+          <button
+            className="avatar"
+            onClick={() => setPage("settings")}
+            aria-label="Abrir ajustes"
+          >
+            {session.user.email?.slice(0, 1).toUpperCase()}
+          </button>
+        </div>
       </header>
       <main>
         {notice && (
@@ -350,8 +397,17 @@ export default function App() {
                 <div className="eyebrow">SEU DINHEIRO, COM DIREÇÃO</div>
                 <h1>Um passo de cada vez.</h1>
                 <section className="balance">
-                  <span>Saldo total hoje</span>
-                  <h2>{money(totalBalance)}</h2>
+                  <span>Saldo disponível</span>
+                  <h2>{money(balances.available)}</h2>
+                  <div className="balance-secondary">
+                    <div>
+                      Investimentos e reserva{" "}
+                      <strong>{money(balances.reserve)}</strong>
+                    </div>
+                    <div>
+                      Patrimônio total <strong>{money(balances.total)}</strong>
+                    </div>
+                  </div>
                   <small>Inclui contas arquivadas · lançamentos até hoje</small>
                   <button onClick={() => setEditor({ kind: "transaction" })}>
                     + Nova movimentação
@@ -384,7 +440,8 @@ export default function App() {
                 </div>
                 {totals.saved !== null && (
                   <p className="muted">
-                    {totals.saved.toFixed(1)}% da receita economizada no mês.
+                    {valuesHidden ? "••••" : `${totals.saved.toFixed(1)}%`} da
+                    receita economizada no mês.
                   </p>
                 )}
                 {!!spending.length && (
@@ -522,6 +579,35 @@ export default function App() {
                 })()}
               </>
             )}
+            {page === "investments" && (
+              <>
+                <h1>Investimentos e Reserva</h1>
+                <section className="balance">
+                  <span>Total em investimentos e reserva</span>
+                  <h2>{money(balances.reserve)}</h2>
+                  <small>Inclui contas arquivadas · lançamentos até hoje</small>
+                </section>
+                {reserveAccounts.length ? (
+                  reserveAccounts.map((a) => (
+                    <div className="account-line" key={a.id}>
+                      <div>
+                        <strong>{a.name}</strong>
+                        <small>
+                          {accountTypes[a.type]}
+                          {!a.is_active && " · Arquivada"}
+                        </small>
+                      </div>
+                      <strong>{money(balance(a, data.transactions))}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <p className="empty">
+                    Nenhuma conta de poupança ou investimento. Crie uma conta em
+                    Ajustes.
+                  </p>
+                )}
+              </>
+            )}
             {page === "goals" && (
               <>
                 <div className="section-heading">
@@ -639,12 +725,15 @@ export default function App() {
           ["home", "⌂", "Início"],
           ["history", "↕", "Movimentações"],
           ["add", "+", "Adicionar"],
+          ["investments", "◇", "Reserva"],
           ["goals", "◎", "Objetivos"],
           ["settings", "☷", "Ajustes"],
         ].map(([id, icon, label]) => (
           <button
             key={id}
-            aria-label={label}
+            aria-label={
+              id === "investments" ? "Investimentos e Reserva" : label
+            }
             aria-current={page === id ? "page" : undefined}
             disabled={id === "add" && (loading || !!error)}
             className={`${page === id ? "selected" : ""} ${id === "add" ? "add" : ""}`}
@@ -660,6 +749,7 @@ export default function App() {
       {editor && (
         <EditorForm
           editor={editor}
+          valuesHidden={valuesHidden}
           data={data}
           onClose={() => setEditor(null)}
           onSaved={async () => {
@@ -845,11 +935,13 @@ function Auth({
 }
 function EditorForm({
   editor,
+  valuesHidden,
   data,
   onClose,
   onSaved,
 }: {
   editor: Editor;
+  valuesHidden: boolean;
   data: ReturnType<typeof useFinance>["data"];
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -1024,7 +1116,9 @@ function EditorForm({
                 required
                 name="amount"
                 inputMode="decimal"
-                placeholder="0,00"
+                type={valuesHidden ? "password" : "text"}
+                autoComplete="off"
+                placeholder={valuesHidden ? "••••" : "0,00"}
                 defaultValue={
                   transaction ? inputMoney(transaction.amount_cents) : ""
                 }
@@ -1062,6 +1156,8 @@ function EditorForm({
                   required
                   name="initial"
                   inputMode="decimal"
+                  type={valuesHidden ? "password" : "text"}
+                  autoComplete="off"
                   defaultValue={inputMoney(
                     editor.row?.initial_balance_cents ?? 0,
                   )}
@@ -1080,6 +1176,8 @@ function EditorForm({
                   required
                   name="target"
                   inputMode="decimal"
+                  type={valuesHidden ? "password" : "text"}
+                  autoComplete="off"
                   defaultValue={
                     editor.row ? inputMoney(editor.row.target_amount_cents) : ""
                   }
@@ -1090,6 +1188,8 @@ function EditorForm({
                   required
                   name="initial"
                   inputMode="decimal"
+                  type={valuesHidden ? "password" : "text"}
+                  autoComplete="off"
                   defaultValue={inputMoney(
                     editor.row?.initial_amount_cents ?? 0,
                   )}

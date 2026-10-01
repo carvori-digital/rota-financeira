@@ -4,6 +4,7 @@ import {
   parseMoney,
   inputMoney,
   balance,
+  balanceSummary,
   monthly,
   goalProgress,
 } from "../src/utils/finance.ts";
@@ -110,4 +111,72 @@ test("objetivo soma apenas os aportes vinculados e limita valor restante a zero"
     ]),
     { accumulated: 11000, remaining: 0, percent: 110 },
   );
+});
+
+test("resumo separa os cinco tipos, inclui arquivadas e mantém centavos negativos", () => {
+  const accounts = [
+    { ...a, initial_balance_cents: -29 },
+    { ...a, id: "wallet", type: "wallet", initial_balance_cents: 150 },
+    { ...a, id: "other", type: "other", initial_balance_cents: 300 },
+    {
+      ...a,
+      id: "savings",
+      type: "savings",
+      initial_balance_cents: 500,
+      is_active: false,
+    },
+    { ...a, id: "investment", type: "investment", initial_balance_cents: 700 },
+  ];
+  assert.deepEqual(balanceSummary(accounts, []), {
+    available: 421,
+    reserve: 1200,
+    total: 1621,
+  });
+  assert.deepEqual(balanceSummary([], []), {
+    available: 0,
+    reserve: 0,
+    total: 0,
+  });
+});
+test("transferências para reserva reduzem disponível sem mudar patrimônio, e retorno inverte", () => {
+  for (const type of ["savings", "investment"]) {
+    const accounts = [a, { ...b, type }];
+    assert.deepEqual(balanceSummary(accounts, [t], "2026-10-01"), {
+      available: 7000,
+      reserve: 5000,
+      total: 12000,
+    });
+    assert.deepEqual(balanceSummary(accounts, [t], "2026-09-30"), {
+      available: 10000,
+      reserve: 2000,
+      total: 12000,
+    });
+    const back = {
+      ...t,
+      id: "back",
+      account_id: "b",
+      destination_account_id: "a",
+      amount_cents: 1000,
+    };
+    assert.deepEqual(balanceSummary(accounts, [t, back], "2026-10-01"), {
+      available: 8000,
+      reserve: 4000,
+      total: 12000,
+    });
+  }
+});
+test("transferências internas de cada grupo preservam ambos os subtotais", () => {
+  for (const types of [
+    ["checking", "wallet"],
+    ["savings", "investment"],
+  ]) {
+    const accounts = [
+      { ...a, type: types[0] },
+      { ...b, type: types[1] },
+    ];
+    assert.deepEqual(
+      balanceSummary(accounts, [t], "2026-10-01"),
+      balanceSummary(accounts, [], "2026-10-01"),
+    );
+  }
 });
