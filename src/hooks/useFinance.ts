@@ -20,6 +20,8 @@ export function useFinance(userId: string | undefined) {
     const run = ++generation.current;
     if (!userId || !supabase) {
       setSnapshot({ owner: userId, data: empty });
+      setLoading(false);
+      setError("");
       return;
     }
     setLoading(true);
@@ -66,6 +68,18 @@ export function useFinance(userId: string | undefined) {
     void refresh();
     return invalidate;
   }, [refresh, invalidate, userId]);
+  useEffect(() => {
+    if (!userId) return;
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("online", whenVisible);
+    document.addEventListener("visibilitychange", whenVisible);
+    return () => {
+      window.removeEventListener("online", whenVisible);
+      document.removeEventListener("visibilitychange", whenVisible);
+    };
+  }, [userId, refresh]);
   return {
     data: snapshot.owner === userId ? snapshot.data : empty,
     loading: loading || snapshot.owner !== userId,

@@ -10,6 +10,7 @@ import {
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../src/App";
+import { act } from "react";
 import { today } from "../src/utils/finance";
 
 type Row = Record<string, unknown>;
@@ -18,6 +19,8 @@ const backend = vi.hoisted(() => ({
   writes: [] as Row[],
   readError: false,
   writeError: false,
+  lostResponse: false,
+  authCalls: [] as { kind: string; payload: unknown }[],
   session: { user: { id: "user-a", email: "teste@example.com" } } as {
     user: { id: string; email: string };
   } | null,
@@ -54,6 +57,18 @@ vi.mock("../src/lib/supabase", () => ({
         backend.listener?.("SIGNED_IN", backend.session);
         return { error: null };
       },
+      signUp: async (payload: unknown) => {
+        backend.authCalls.push({ kind: "signup", payload });
+        return { data: { session: null }, error: null };
+      },
+      resetPasswordForEmail: async (email: string, options: unknown) => {
+        backend.authCalls.push({ kind: "reset", payload: { email, options } });
+        return { error: null };
+      },
+      updateUser: async (payload: unknown) => {
+        backend.authCalls.push({ kind: "password", payload });
+        return { error: null };
+      },
     },
     from: (table: string) => {
       let mode = "read";
@@ -80,12 +95,26 @@ vi.mock("../src/lib/supabase", () => ({
           payload = row;
           return query;
         },
+        delete: () => {
+          mode = "delete";
+          return query;
+        },
         then: (resolve: (value: unknown) => unknown) => {
           if (mode === "write" && backend.writeError)
             return Promise.resolve({
               data: null,
               error: { message: "network" },
             }).then(resolve);
+          if (mode === "delete") {
+            const found = backend.rows[table].find((r) => r.id === id);
+            backend.rows[table] = backend.rows[table].filter(
+              (r) => r.id !== id,
+            );
+            return Promise.resolve({
+              data: found ? [{ id }] : [],
+              error: null,
+            }).then(resolve);
+          }
           const written = {
             user_id: "user-a",
             created_at: new Date().toISOString(),
@@ -103,9 +132,11 @@ vi.mock("../src/lib/supabase", () => ({
               ...backend.rows[table][previous],
               ...written,
             };
+          const lost = backend.lostResponse;
+          backend.lostResponse = false;
           return Promise.resolve({
             data: [{ id: written.id }],
-            error: null,
+            error: lost ? { message: "lost response" } : null,
           }).then(resolve);
         },
       };
@@ -125,6 +156,8 @@ beforeEach(() => {
   backend.session = { user: { id: "user-a", email: "teste@example.com" } };
   backend.readError = false;
   backend.writeError = false;
+  backend.lostResponse = false;
+  backend.authCalls = [];
   backend.writes = [];
   backend.rows = {
     accounts: [
@@ -159,6 +192,117 @@ async function open() {
   return userEvent.setup();
 }
 describe("fluxos reais da interface com Supabase isolado de teste", () => {
+  it("cadastro informa confirmação e recuperação oferece envio de link", async () => {
+    backend.session = null;
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByText("Bem-vindo de volta");
+    await user.click(
+      screen.getByRole("button", { name: "Criar uma conta", exact: true }),
+    );
+    await user.type(screen.getByLabelText("E-mail"), "fixture@example.com");
+    await user.type(screen.getByLabelText("Senha"), "fixture-password");
+    await user.click(
+      screen.getByRole("button", { name: "Criar conta", exact: true }),
+    );
+    await screen.findByText(/Confira seu e-mail/);
+    expect(backend.authCalls[0].kind).toBe("signup");
+    await user.click(
+      screen.getByRole("button", { name: "Esqueci minha senha", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Enviar link", exact: true }),
+    );
+    await screen.findByText(/receberá um link/);
+    expect(backend.authCalls[1].kind).toBe("reset");
+    act(() =>
+      backend.listener?.("PASSWORD_RECOVERY", {
+        user: { id: "user-a", email: "fixture@example.com" },
+      }),
+    );
+    await screen.findByText("Nova senha");
+    expect(screen.getByLabelText("Senha")).toBeTruthy();
+    await user.type(screen.getByLabelText("Senha"), "new-fixture-password");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar senha", exact: true }),
+    );
+    await screen.findByText("Saldo total hoje");
+    expect(backend.authCalls[2]).toMatchObject({
+      kind: "password",
+      payload: { password: "new-fixture-password" },
+    });
+  });
+  it("limpar período do histórico não transforma dashboard em total de todos os meses", async () => {
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Movimentações", exact: true }),
+    );
+    await user.clear(screen.getByLabelText("Mês"));
+    await user.click(
+      screen.getByRole("button", { name: "Início", exact: true }),
+    );
+    expect(
+      (screen.getByLabelText("Mês do resumo") as HTMLInputElement).value,
+    ).toBe(today().slice(0, 7));
+  });
+  it("repetir após resposta perdida não duplica lançamento já gravado", async () => {
+    const user = await open();
+    backend.lostResponse = true;
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.type(screen.getByLabelText("Valor (R$)"), "10");
+    await user.selectOptions(screen.getByLabelText("Categoria"), "c");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByRole("alert");
+    expect(backend.rows.transactions).toHaveLength(1);
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByText(/Salvo com sucesso/);
+    expect(backend.rows.transactions).toHaveLength(1);
+    expect(backend.writes[0].id).toBe(backend.writes[1].id);
+  });
+  it("editar e excluir movimentação atualiza histórico e saldo", async () => {
+    backend.rows.transactions = [
+      {
+        id: "t",
+        account_id: "a",
+        category_id: "c",
+        destination_account_id: null,
+        type: "expense",
+        amount_cents: 1000,
+        description: "Compra fixture",
+        transaction_date: today(),
+        is_recurring: false,
+        recurrence_frequency: null,
+        created_at: new Date().toISOString(),
+      },
+    ];
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Movimentações", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Editar", exact: true }),
+    );
+    await user.clear(screen.getByLabelText("Valor (R$)"));
+    await user.type(screen.getByLabelText("Valor (R$)"), "20");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByText(/Salvo com sucesso/);
+    expect(backend.rows.transactions[0].amount_cents).toBe(2000);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(
+      screen.getByRole("button", { name: "Excluir", exact: true }),
+    );
+    await screen.findByText("Registro excluído.");
+    expect(backend.rows.transactions).toHaveLength(0);
+    confirm.mockRestore();
+  });
   it("reconstitui sessão e permite cadastrar despesa em centavos", async () => {
     const user = await open();
     await user.click(

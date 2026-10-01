@@ -1,6 +1,8 @@
 {
   "name": "Rota Financeira",
   "short_name": "Rota",
+  "id": "/",
+  "description": "Contas, movimentações e objetivos financeiros pessoais.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",

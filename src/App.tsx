@@ -61,6 +61,7 @@ export default function App() {
   const [operation, setOperation] = useState(false);
   const { data, loading, error, refresh } = useFinance(session?.user.id);
   const [month, setMonth] = useState(today().slice(0, 7));
+  const [historyMonth, setHistoryMonth] = useState(today().slice(0, 7));
   const [filterAccount, setFilterAccount] = useState("");
   const [filterType, setFilterType] = useState("");
   useEffect(() => {
@@ -105,7 +106,13 @@ export default function App() {
       </main>
     );
   if (!session || recovery)
-    return <Auth recovery={recovery} onRecovered={() => setRecovery(false)} />;
+    return (
+      <Auth
+        key={recovery ? "recovery" : "signin"}
+        recovery={recovery}
+        onRecovered={() => setRecovery(false)}
+      />
+    );
   const totals = monthly(data.transactions, month);
   const totalBalance = data.accounts.reduce(
     (s, a) => s + balance(a, data.transactions),
@@ -460,8 +467,8 @@ export default function App() {
                   <Field label="Mês">
                     <input
                       type="month"
-                      value={month}
-                      onChange={(e) => setMonth(e.target.value)}
+                      value={historyMonth}
+                      onChange={(e) => setHistoryMonth(e.target.value)}
                     />
                   </Field>
                   <Field label="Conta">
@@ -500,7 +507,8 @@ export default function App() {
                 {(() => {
                   const filtered = sorted.filter(
                     (t) =>
-                      (!month || t.transaction_date.startsWith(month)) &&
+                      (!historyMonth ||
+                        t.transaction_date.startsWith(historyMonth)) &&
                       (!filterType || t.type === filterType) &&
                       (!filterAccount ||
                         t.account_id === filterAccount ||
@@ -737,9 +745,17 @@ function Auth({
         const r = await supabase!.auth.signInWithPassword({ email, password });
         if (r.error) throw r.error;
       }
-    } catch {
+    } catch (error) {
+      const code = (error as { code?: string }).code;
       setMessage(
-        "Não foi possível concluir. Confira seus dados e a conexão. No cadastro, use uma senha com pelo menos 8 caracteres.",
+        code === "email_not_confirmed"
+          ? "Confirme seu e-mail pelo link recebido antes de entrar."
+          : code === "invalid_credentials"
+            ? "E-mail ou senha incorretos. Confira seus dados."
+            : code === "over_email_send_rate_limit" ||
+                code === "over_request_rate_limit"
+              ? "Muitas tentativas. Aguarde alguns minutos e tente novamente."
+              : "Não foi possível concluir. Confira seus dados e a conexão. No cadastro, use uma senha com pelo menos 8 caracteres.",
       );
     } finally {
       setBusy(false);
@@ -770,7 +786,7 @@ function Auth({
             <input required name="email" type="email" autoComplete="email" />
           </Field>
         )}
-        {mode !== "reset" && (
+        {(recovery || mode !== "reset") && (
           <Field label="Senha">
             <input
               required
@@ -805,6 +821,7 @@ function Auth({
       {!recovery && (
         <div className="auth-actions">
           <button
+            disabled={busy}
             onClick={() => {
               setMode(mode === "signup" ? "login" : "signup");
               setMessage("");
@@ -813,6 +830,7 @@ function Auth({
             {mode === "signup" ? "Já tenho conta" : "Criar uma conta"}
           </button>
           <button
+            disabled={busy}
             onClick={() => {
               setMode(mode === "reset" ? "login" : "reset");
               setMessage("");
@@ -958,6 +976,7 @@ function EditorForm({
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="editor-title"
       onCancel={(e) => {
         e.preventDefault();
         if (!busy) onClose();
@@ -965,7 +984,7 @@ function EditorForm({
     >
       <form onSubmit={submit}>
         <div className="section-heading">
-          <h2>
+          <h2 id="editor-title">
             {row ? "Editar " : ""}
             {titles[editor.kind]}
           </h2>
@@ -978,230 +997,240 @@ function EditorForm({
             ×
           </button>
         </div>
-        {(editor.kind === "transaction" || editor.kind === "category") && (
-          <div className="segments">
-            {Object.entries(labels)
-              .filter(
-                ([k]) => editor.kind === "transaction" || k !== "transfer",
-              )
-              .map(([k, v]) => (
-                <button
-                  type="button"
-                  key={k}
-                  className={type === k ? "active" : ""}
-                  onClick={() => setType(k as typeof type)}
-                >
-                  {v}
-                </button>
-              ))}
-          </div>
-        )}
-        {(editor.kind === "transaction" || editor.kind === "contribution") && (
-          <Field label="Valor (R$)">
-            <input
-              className="amount-input"
-              required
-              name="amount"
-              inputMode="decimal"
-              placeholder="0,00"
-              defaultValue={
-                transaction ? inputMoney(transaction.amount_cents) : ""
-              }
-            />
-          </Field>
-        )}
-        {(editor.kind === "account" ||
-          editor.kind === "category" ||
-          editor.kind === "goal") && (
-          <Field label="Nome">
-            <input
-              name="name"
-              required
-              maxLength={80}
-              defaultValue={editor.row?.name}
-            />
-          </Field>
-        )}
-        {editor.kind === "account" && (
-          <>
-            <Field label="Tipo de conta">
-              <select
-                name="account_type"
-                defaultValue={editor.row?.type ?? "checking"}
-              >
-                {Object.entries(accountTypes).map(([k, v]) => (
-                  <option key={k} value={k}>
+        <fieldset disabled={busy}>
+          {(editor.kind === "transaction" || editor.kind === "category") && (
+            <div className="segments">
+              {Object.entries(labels)
+                .filter(
+                  ([k]) => editor.kind === "transaction" || k !== "transfer",
+                )
+                .map(([k, v]) => (
+                  <button
+                    type="button"
+                    key={k}
+                    className={type === k ? "active" : ""}
+                    onClick={() => setType(k as typeof type)}
+                  >
                     {v}
-                  </option>
+                  </button>
                 ))}
-              </select>
-            </Field>
-            <Field label="Saldo inicial (R$)">
+            </div>
+          )}
+          {(editor.kind === "transaction" ||
+            editor.kind === "contribution") && (
+            <Field label="Valor (R$)">
               <input
+                className="amount-input"
                 required
-                name="initial"
+                name="amount"
                 inputMode="decimal"
-                defaultValue={inputMoney(
-                  editor.row?.initial_balance_cents ?? 0,
-                )}
-              />
-            </Field>
-            <small>
-              Alterar o saldo inicial recalcula o saldo atual. Os lançamentos
-              continuam preservados.
-            </small>
-          </>
-        )}
-        {editor.kind === "goal" && (
-          <>
-            <Field label="Meta (R$)">
-              <input
-                required
-                name="target"
-                inputMode="decimal"
+                placeholder="0,00"
                 defaultValue={
-                  editor.row ? inputMoney(editor.row.target_amount_cents) : ""
+                  transaction ? inputMoney(transaction.amount_cents) : ""
                 }
               />
             </Field>
-            <Field label="Já acumulado (R$)">
+          )}
+          {(editor.kind === "account" ||
+            editor.kind === "category" ||
+            editor.kind === "goal") && (
+            <Field label="Nome">
               <input
+                name="name"
                 required
-                name="initial"
-                inputMode="decimal"
-                defaultValue={inputMoney(editor.row?.initial_amount_cents ?? 0)}
+                maxLength={80}
+                defaultValue={editor.row?.name}
               />
             </Field>
-            <Field label="Data desejada (opcional)">
-              <input
-                type="date"
-                name="date"
-                defaultValue={editor.row?.target_date ?? ""}
-              />
-            </Field>
-          </>
-        )}
-        {editor.kind === "transaction" && (
-          <>
-            <Field label={type === "transfer" ? "Conta de origem" : "Conta"}>
-              <select
-                required
-                name="account"
-                defaultValue={transaction?.account_id ?? accounts[0]?.id ?? ""}
-              >
-                {!accounts.length && (
-                  <option value="">Crie uma conta em Ajustes</option>
-                )}
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                    {!a.is_active ? " (arquivada)" : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {type === "transfer" ? (
-              <Field label="Conta de destino">
+          )}
+          {editor.kind === "account" && (
+            <>
+              <Field label="Tipo de conta">
                 <select
-                  required
-                  name="destination"
-                  defaultValue={transaction?.destination_account_id ?? ""}
+                  name="account_type"
+                  defaultValue={editor.row?.type ?? "checking"}
                 >
-                  <option value="">Selecione</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
+                  {Object.entries(accountTypes).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
                     </option>
                   ))}
                 </select>
               </Field>
-            ) : (
-              <Field label="Categoria">
-                <select
-                  key={type}
+              <Field label="Saldo inicial (R$)">
+                <input
                   required
-                  name="category"
+                  name="initial"
+                  inputMode="decimal"
+                  defaultValue={inputMoney(
+                    editor.row?.initial_balance_cents ?? 0,
+                  )}
+                />
+              </Field>
+              <small>
+                Alterar o saldo inicial recalcula o saldo atual. Os lançamentos
+                continuam preservados.
+              </small>
+            </>
+          )}
+          {editor.kind === "goal" && (
+            <>
+              <Field label="Meta (R$)">
+                <input
+                  required
+                  name="target"
+                  inputMode="decimal"
                   defaultValue={
-                    transaction?.type === type
-                      ? (transaction.category_id ?? "")
-                      : ""
+                    editor.row ? inputMoney(editor.row.target_amount_cents) : ""
+                  }
+                />
+              </Field>
+              <Field label="Já acumulado (R$)">
+                <input
+                  required
+                  name="initial"
+                  inputMode="decimal"
+                  defaultValue={inputMoney(
+                    editor.row?.initial_amount_cents ?? 0,
+                  )}
+                />
+              </Field>
+              <Field label="Data desejada (opcional)">
+                <input
+                  type="date"
+                  name="date"
+                  defaultValue={editor.row?.target_date ?? ""}
+                />
+              </Field>
+            </>
+          )}
+          {editor.kind === "transaction" && (
+            <>
+              <Field label={type === "transfer" ? "Conta de origem" : "Conta"}>
+                <select
+                  required
+                  name="account"
+                  defaultValue={
+                    transaction?.account_id ?? accounts[0]?.id ?? ""
                   }
                 >
-                  <option value="">Selecione</option>
-                  {data.categories
-                    .filter((c) => c.type === type)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                  {!accounts.length && (
+                    <option value="">Crie uma conta em Ajustes</option>
+                  )}
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {!a.is_active ? " (arquivada)" : ""}
+                    </option>
+                  ))}
                 </select>
               </Field>
-            )}
-          </>
-        )}
-        {(editor.kind === "transaction" || editor.kind === "contribution") && (
-          <>
-            <Field label="Descrição (opcional)">
-              <input
-                name="description"
-                maxLength={240}
-                defaultValue={transaction?.description}
-              />
-            </Field>
-            <Field label="Data">
-              <input
-                required
-                type="date"
-                name="date"
-                defaultValue={transaction?.transaction_date ?? today()}
-              />
-            </Field>
-          </>
-        )}
-        {editor.kind === "transaction" && (
-          <>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={recurring}
-                onChange={(e) => setRecurring(e.target.checked)}
-              />{" "}
-              Recorrente
-            </label>
-            {recurring && (
-              <>
-                <Field label="Frequência">
+              {type === "transfer" ? (
+                <Field label="Conta de destino">
                   <select
-                    name="frequency"
-                    defaultValue={
-                      transaction?.recurrence_frequency ?? "monthly"
-                    }
+                    required
+                    name="destination"
+                    defaultValue={transaction?.destination_account_id ?? ""}
                   >
-                    <option value="weekly">Semanal</option>
-                    <option value="monthly">Mensal</option>
-                    <option value="yearly">Anual</option>
+                    <option value="">Selecione</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
                   </select>
                 </Field>
-                <small>A marcação não cria lançamentos automaticamente.</small>
-              </>
-            )}
-          </>
-        )}
-        {editor.kind === "contribution" && (
-          <p className="muted">
-            Para {editor.goal.name}. Este registro não retira dinheiro de uma
-            conta.
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="notice">
-            {error}
-          </p>
-        )}
-        <button className="primary" disabled={busy}>
-          {busy ? "Salvando…" : "Salvar"}
-        </button>
+              ) : (
+                <Field label="Categoria">
+                  <select
+                    key={type}
+                    required
+                    name="category"
+                    defaultValue={
+                      transaction?.type === type
+                        ? (transaction.category_id ?? "")
+                        : ""
+                    }
+                  >
+                    <option value="">Selecione</option>
+                    {data.categories
+                      .filter((c) => c.type === type)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              )}
+            </>
+          )}
+          {(editor.kind === "transaction" ||
+            editor.kind === "contribution") && (
+            <>
+              <Field label="Descrição (opcional)">
+                <input
+                  name="description"
+                  maxLength={240}
+                  defaultValue={transaction?.description}
+                />
+              </Field>
+              <Field label="Data">
+                <input
+                  required
+                  type="date"
+                  name="date"
+                  defaultValue={transaction?.transaction_date ?? today()}
+                />
+              </Field>
+            </>
+          )}
+          {editor.kind === "transaction" && (
+            <>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                />{" "}
+                Recorrente
+              </label>
+              {recurring && (
+                <>
+                  <Field label="Frequência">
+                    <select
+                      name="frequency"
+                      defaultValue={
+                        transaction?.recurrence_frequency ?? "monthly"
+                      }
+                    >
+                      <option value="weekly">Semanal</option>
+                      <option value="monthly">Mensal</option>
+                      <option value="yearly">Anual</option>
+                    </select>
+                  </Field>
+                  <small>
+                    A marcação não cria lançamentos automaticamente.
+                  </small>
+                </>
+              )}
+            </>
+          )}
+          {editor.kind === "contribution" && (
+            <p className="muted">
+              Para {editor.goal.name}. Este registro não retira dinheiro de uma
+              conta.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="notice">
+              {error}
+            </p>
+          )}
+          <button className="primary" disabled={busy}>
+            {busy ? "Salvando…" : "Salvar"}
+          </button>
+        </fieldset>
       </form>
     </dialog>
   );

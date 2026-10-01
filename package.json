@@ -4,17 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "npm run test:unit && npm run test:db && npm run test:ui",
     "test:isolation": "node scripts/test-isolation.mjs",
-    "preview": "vite preview --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1 --port 42817 --strictPort",
     "test:db": "node --test tests/database.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts",
     "format": "prettier --write .",
-    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts"
+    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/pwa.test.ts",
+    "test:live": "node --experimental-strip-types scripts/test-live.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
