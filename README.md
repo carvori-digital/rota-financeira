@@ -12,7 +12,9 @@ Execute `npm run dev`. Sem configuração válida, a aplicação mostra instruç
 
 Use o projeto Supabase existente. Não é necessário criar outro: em novos ambientes, o projeto seria criado pelo painel Supabase e configurado pelos mesmos passos abaixo.
 
-No SQL Editor do projeto correto, execute integralmente **`supabase/migrations/202610010001_initial.sql`**, uma única vez. A migration é transacional e cria schema, constraints, RLS, índices e categorias padrão. Para ambientes gerenciados pela CLI, use migrations versionadas com `supabase db push` somente após conferir o projeto vinculado.
+A migration **`supabase/migrations/202610010001_initial.sql`** é transacional e cria schema, constraints, RLS, índices e categorias padrão. Foi aplicada via CLI ao projeto **Rota Financeira**, ref `lgcozsoenycvifiygdsj`, após confirmar o nome remoto e executar dry-run. Não precisa executá-la novamente no SQL Editor.
+
+Para migrations futuras, use a CLI oficial (`npx --yes supabase`; versão validada: 2.119.0). Autentique com `npx --yes supabase login --no-browser --agent no --output-format text` no navegador/perfil correto. Confira `npx --yes supabase whoami` e `npx --yes supabase projects list`, depois vincule com `npx --yes supabase link --project-ref lgcozsoenycvifiygdsj`. Execute primeiro `npx --yes supabase db push --linked --dry-run --skip-vault`; confira a lista antes de aplicar `npx --yes supabase db push --linked --skip-vault`. Nesta execução, a sessão autenticada permitiu usar uma role temporária de banco sem solicitar a senha do banco. Nunca use `db reset` no projeto remoto. A sessão da CLI e o vínculo em `supabase/.temp` não vão para o Git.
 
 Em Authentication → URL Configuration, configure Site URL e Redirect URLs para `http://127.0.0.1:5173` e depois a URL HTTPS publicada. Habilite o provedor Email. A aplicação suporta confirmação de e-mail: se habilitada, o usuário confirma antes de entrar. Para uso privado imediato, pode desabilitar Confirm email no painel; isso é uma escolha do proprietário. Para recuperação de senha em produção, configure o envio de e-mails/SMTP e confira o redirect.
 
@@ -21,6 +23,8 @@ Em Authentication → URL Configuration, configure Site URL e Redirect URLs para
 `npm run lint`, `npm test`, `npm run typecheck`, `npm run build`. `npm test` inclui as suítes financeira, banco e interface. Os testes de interface usam um Supabase simulado exclusivamente em teste para validar gravações, falhas, transferências, aportes e logout.
 
 `npm run test:db` executa a migration em PostgreSQL embarcado de teste e valida RLS, constraints, seed e transferência. Isso não substitui o teste no Supabase real.
+
+O isolamento também foi validado no PostgreSQL remoto com `npx --yes supabase db query --linked --file scripts/test-isolation.sql`. O script cria fixtures e usuários temporários, simula os JWTs com a role `authenticated`, testa ambas as direções nas cinco tabelas e as relações entre entidades, e reverte toda a transação. Não mantém usuários nem dados de teste. Esse teste comprova as regras do banco; o roteiro por API abaixo também verifica o acesso com sessões reais de Auth.
 
 Para comprovar isolamento no projeto real, crie **dois usuários exclusivos de teste**, confirmados. Defina no terminal as variáveis da `.env.example` e `TEST_A_EMAIL`, `TEST_A_PASSWORD`, `TEST_B_EMAIL`, `TEST_B_PASSWORD` sem salvar senhas no projeto. Execute `npm run test:isolation`. O teste verifica listar/ler/editar/excluir/inserir em nome do outro nas cinco tabelas, em ambas as direções, e relações cruzadas. Cria apenas fixtures identificadas e as remove ao terminar. Não use contas com dados reais.
 
