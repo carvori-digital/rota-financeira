@@ -638,3 +638,44 @@ describe("disponível, reserva e privacidade", () => {
     }
   });
 });
+
+describe("navegação mobile e movimento reduzido", () => {
+  it("mantém os seis destinos e nomes acessíveis com rótulos curtos", async () => {
+    await open();
+    const nav = screen.getByRole("navigation", { name: "Navegação principal" });
+    expect(nav.querySelectorAll("button")).toHaveLength(6);
+    expect(
+      screen.getByRole("button", { name: "Movimentações", exact: true })
+        .textContent,
+    ).toContain("Movimentos");
+    expect(
+      screen.getByRole("button", { name: "Adicionar", exact: true })
+        .textContent,
+    ).toContain("Novo");
+    for (const name of [
+      "Início",
+      "Investimentos e Reserva",
+      "Objetivos",
+      "Ajustes",
+    ])
+      expect(screen.getByRole("button", { name, exact: true })).toBeTruthy();
+  });
+  it("fecha modal imediatamente quando movimento reduzido está ativo", async () => {
+    const original = window.matchMedia;
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    try {
+      const user = await open();
+      await user.click(
+        screen.getByRole("button", { name: "Adicionar", exact: true }),
+      );
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      await user.click(
+        screen.getByRole("button", { name: "Fechar", exact: true }),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(backend.writes).toHaveLength(0);
+    } finally {
+      vi.stubGlobal("matchMedia", original);
+    }
+  });
+});

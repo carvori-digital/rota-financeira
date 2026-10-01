@@ -49,6 +49,14 @@ button {
   border-radius: 10px;
   padding: 8px 10px;
   font-weight: 600;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+button:active:not(:disabled) {
+  background: #d6e4d8;
+  box-shadow: inset 0 0 0 2px #235d4926;
 }
 button:hover {
   background: #e5ece4;
@@ -123,7 +131,7 @@ header {
   border-radius: 50%;
 }
 main {
-  padding: 18px 0 115px;
+  padding: 18px 0 calc(115px + env(safe-area-inset-bottom));
 }
 .eyebrow {
   font-size: 10px;
@@ -325,8 +333,8 @@ nav {
   max-width: 740px;
   background: #fafcf7f5;
   border-top: 1px solid #dce3d8;
-  display: flex;
-  justify-content: space-around;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   z-index: 2;
   backdrop-filter: blur(10px);
@@ -334,8 +342,10 @@ nav {
 nav button {
   color: #758176;
   min-width: 0;
-  flex: 1;
+  width: 100%;
+  min-height: 54px;
   padding: 5px 1px;
+  overflow: hidden;
 }
 nav button > span {
   display: block;
@@ -343,11 +353,19 @@ nav button > span {
   height: 30px;
 }
 nav button small {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 550;
 }
 nav .selected {
   color: #1b543e;
+  background: #e5ece4;
+  box-shadow: inset 0 2px 0 #347555;
 }
 nav .add > span {
   background: #193f32;
@@ -579,4 +597,152 @@ code {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+/* Presentation only: financial calculations and stored data are unchanged. */
+.page-content {
+  animation: page-enter 180ms ease-out;
+}
+.financial-value {
+  display: inline-block;
+  animation: value-enter 140ms ease-out;
+}
+.notice[role="status"] {
+  animation: feedback-enter 220ms ease-out;
+}
+.panel,
+.account-line,
+.settings-row,
+.movement,
+.segments button {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.summary-detail[open] {
+  animation: page-enter 180ms ease-out;
+}
+dialog[open] {
+  animation: modal-enter 180ms ease-out;
+}
+dialog[open]::backdrop {
+  animation: backdrop-enter 180ms ease-out;
+}
+dialog.is-closing {
+  animation: modal-exit 140ms ease-in forwards;
+  pointer-events: none;
+}
+dialog.is-closing::backdrop {
+  animation: backdrop-exit 140ms ease-in forwards;
+}
+.goal progress::-webkit-progress-value {
+  transform-origin: left;
+  animation: progress-enter 260ms ease-out;
+  transition: width 260ms ease-out;
+}
+.goal progress::-moz-progress-bar {
+  transform-origin: left;
+  animation: progress-enter 260ms ease-out;
+  transition: width 260ms ease-out;
+}
+@media (hover: hover) {
+  .panel:hover {
+    border-color: #b6cbb9;
+  }
+  .account-line:hover,
+  .settings-row:hover,
+  .movement:hover {
+    background-color: #eaf0e6;
+  }
+}
+@media (max-width: 430px) {
+  nav {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  nav button small {
+    font-size: clamp(9px, 2.45vw, 10px);
+    letter-spacing: -0.2px;
+  }
+}
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes value-enter {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes feedback-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes modal-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes progress-enter {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

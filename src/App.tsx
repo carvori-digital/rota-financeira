@@ -75,7 +75,11 @@ export default function App() {
       // The toggle still works when browser storage is unavailable.
     }
   }
-  const money = (cents: number) => (valuesHidden ? "••••" : formatMoney(cents));
+  const money = (cents: number) => (
+    <span className="financial-value" key={valuesHidden ? "hidden" : "visible"}>
+      {valuesHidden ? "••••" : formatMoney(cents)}
+    </span>
+  );
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [recovery, setRecovery] = useState(false);
@@ -391,7 +395,7 @@ export default function App() {
           </div>
         )}
         {!error && !loading && (
-          <>
+          <div className="page-content" key={page}>
             {page === "home" && (
               <>
                 <div className="eyebrow">SEU DINHEIRO, COM DIREÇÃO</div>
@@ -717,7 +721,7 @@ export default function App() {
                 <small className="muted">Rota Financeira · v0.1</small>
               </>
             )}
-          </>
+          </div>
         )}
       </main>
       <nav aria-label="Navegação principal">
@@ -742,7 +746,9 @@ export default function App() {
             }
           >
             <span aria-hidden="true">{icon}</span>
-            <small>{label}</small>
+            <small>
+              {id === "history" ? "Movimentos" : id === "add" ? "Novo" : label}
+            </small>
           </button>
         ))}
       </nav>
@@ -960,12 +966,26 @@ function EditorForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draftId] = useState(() => crypto.randomUUID());
   useEffect(() => {
     const d = dialogRef.current;
     d?.showModal();
-    return () => d?.close();
+    return () => {
+      d?.close();
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
   }, []);
+  function closeWithMotion(action: () => void) {
+    if (closing) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      action();
+      return;
+    }
+    setClosing(true);
+    closeTimer.current = setTimeout(action, 140);
+  }
   const accounts = data.accounts.filter(
     (a) =>
       a.is_active ||
@@ -1059,7 +1079,7 @@ function EditorForm({
       if (result.error) throw result.error;
       if (!result.data.length)
         throw new Error("Registro não encontrado. Atualize os dados.");
-      await onSaved();
+      closeWithMotion(() => void onSaved());
     } catch (e) {
       setError(explain(e));
       setBusy(false);
@@ -1068,10 +1088,11 @@ function EditorForm({
   return (
     <dialog
       ref={dialogRef}
+      className={closing ? "is-closing" : undefined}
       aria-labelledby="editor-title"
       onCancel={(e) => {
         e.preventDefault();
-        if (!busy) onClose();
+        if (!busy) closeWithMotion(onClose);
       }}
     >
       <form onSubmit={submit}>
@@ -1082,14 +1103,14 @@ function EditorForm({
           </h2>
           <button
             type="button"
-            disabled={busy}
-            onClick={onClose}
+            disabled={busy || closing}
+            onClick={() => closeWithMotion(onClose)}
             aria-label="Fechar"
           >
             ×
           </button>
         </div>
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || closing}>
           {(editor.kind === "transaction" || editor.kind === "category") && (
             <div className="segments">
               {Object.entries(labels)
