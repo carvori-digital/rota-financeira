@@ -1,4 +1,5 @@
-export type Kind = "income" | "expense" | "transfer" | "card_payment";
+export type Kind =
+  "income" | "expense" | "transfer" | "card_payment" | "adjustment";
 export interface Base {
   id: string;
   user_id: string;
@@ -16,7 +17,10 @@ export interface Category extends Base {
   type: "income" | "expense";
 }
 export interface Transaction extends Base {
-  payment_reference?: 'card' | 'debt' | null;
+  status?: "realized" | "pending" | "cancelled";
+  planning_group?: "scheduled" | "other";
+  adjustment_delta_cents?: number | null;
+  payment_reference?: "card" | "debt" | null;
   account_id: string;
   destination_account_id: string | null;
   category_id: string | null;

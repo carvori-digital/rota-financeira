@@ -28,20 +28,28 @@ export function today() {
 }
 export const displayDate = (date: string) =>
   date.split("-").reverse().join("/");
+export function isRealized(t: Transaction, cutoff = today()) {
+  return (
+    (t.status == null || t.status === "realized") &&
+    t.transaction_date <= cutoff
+  );
+}
 export function balance(
   account: Account,
   transactions: Transaction[],
   cutoff = today(),
 ) {
   return transactions
-    .filter((t) => t.transaction_date <= cutoff)
+    .filter((t) => isRealized(t, cutoff))
     .reduce(
       (sum, t) =>
         sum +
         (t.account_id === account.id
-          ? t.type === "income"
-            ? t.amount_cents
-            : -t.amount_cents
+          ? t.type === "adjustment"
+            ? (t.adjustment_delta_cents ?? 0)
+            : t.type === "income"
+              ? t.amount_cents
+              : -t.amount_cents
           : 0) +
         (t.type === "transfer" && t.destination_account_id === account.id
           ? t.amount_cents
@@ -70,7 +78,9 @@ export function balanceSummary(
   );
 }
 export function monthly(transactions: Transaction[], month: string) {
-  const rows = transactions.filter((t) => t.transaction_date.startsWith(month));
+  const rows = transactions.filter(
+    (t) => isRealized(t) && t.transaction_date.startsWith(month),
+  );
   const income = rows
     .filter((t) => t.type === "income")
     .reduce((s, t) => s + t.amount_cents, 0);

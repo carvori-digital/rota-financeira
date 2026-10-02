@@ -1,38 +1,49 @@
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { useFinance } from "./hooks/useFinance";
-import { usePlanning } from './features/planning/usePlanning';
-import { HomeClarity } from './features/planning/HomeClarity';
-import { PlanningWorkspace } from './features/planning/PlanningWorkspace';
-import type { PlanningAction } from './features/planning/PlanningWorkspace';
-import { QuickActions } from './features/planning/ui';
-import { realized } from './features/planning/calculations';
-import { rpc } from './features/planning/queries';
+import { usePlanning } from "./features/planning/usePlanning";
+import { HomeClarity } from "./features/planning/HomeClarity";
+import { PlanningWorkspace } from "./features/planning/PlanningWorkspace";
+import type { PlanningAction } from "./features/planning/PlanningWorkspace";
+import { QuickActions, Status, Field } from "./features/planning/ui";
+import { realized } from "./features/planning/calculations";
+import { FinancialActions } from "./features/planning/FinancialActions";
+import type { FinancialAction } from "./features/planning/FinancialActions";
+import type { Commitment } from "./features/planning/types";
+import { QuickSetup } from "./features/planning/QuickSetup";
+import { invoices } from "./features/cards/calculations";
+import { rpc } from "./features/planning/queries";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
 import {
   balance,
+  isRealized,
   balanceSummary,
   isReserveAccount,
   displayDate,
   goalProgress,
   inputMoney,
   money as formatMoney,
-  monthly,
   parseMoney,
   today,
 } from "./utils/finance";
 type Editor =
   | { kind: "account"; row?: Account }
   | { kind: "category"; row?: Category }
-  | { kind: "transaction"; row?: Transaction; initialType?: 'income'|'expense'|'transfer'; accountId?: string }
+  | {
+      kind: "transaction";
+      row?: Transaction;
+      initialType?: "income" | "expense" | "transfer";
+      accountId?: string;
+    }
   | { kind: "goal"; row?: Goal }
   | { kind: "contribution"; goal: Goal };
 const labels = {
   income: "Receita",
   expense: "Despesa",
   transfer: "Transferência",
+  adjustment: "Ajuste de saldo",
 };
 const accountTypes: Record<string, string> = {
   checking: "Conta corrente",
@@ -41,14 +52,6 @@ const accountTypes: Record<string, string> = {
   investment: "Investimento",
   other: "Outro",
 };
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
 function explain(error: unknown) {
   const value = error as { code?: string; message?: string };
   if (value.code === "23503")
@@ -92,17 +95,24 @@ export default function App() {
   const [recovery, setRecovery] = useState(false);
   const [page, setPage] = useState("home");
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [financialAction, setFinancialAction] =
+    useState<FinancialAction | null>(null);
+  const [setup, setSetup] = useState(false);
   const [quick, setQuick] = useState(false);
-  const [planningAction,setPlanningAction] = useState<PlanningAction|null>(null);
-  const lastAccount=useRef<string>('');
+  const [planningAction, setPlanningAction] = useState<PlanningAction | null>(
+    null,
+  );
+  const lastAccount = useRef<string>("");
   const [notice, setNotice] = useState("");
   const [operation, setOperation] = useState(false);
   const finance = useFinance(session?.user.id);
   const planning = usePlanning(session?.user.id);
-  const { data }=finance;
-  const loading=finance.loading||planning.loading;
-  const error=finance.error||planning.error;
-  async function refresh() { await Promise.all([finance.refresh(),planning.refresh()]); }
+  const { data } = finance;
+  const loading = finance.loading || planning.loading;
+  const error = finance.error || planning.error;
+  async function refresh() {
+    await Promise.all([finance.refresh(), planning.refresh()]);
+  }
   const [month, setMonth] = useState(today().slice(0, 7));
   const [historyMonth, setHistoryMonth] = useState(today().slice(0, 7));
   const [filterAccount, setFilterAccount] = useState("");
@@ -119,7 +129,9 @@ export default function App() {
         if (event === "PASSWORD_RECOVERY") setRecovery(true);
         if (!next) {
           setEditor(null);
-          setQuick(false);setPlanningAction(null);lastAccount.current='';
+          setQuick(false);
+          setPlanningAction(null);
+          lastAccount.current = "";
           setPage("home");
           setNotice("");
         }
@@ -157,8 +169,20 @@ export default function App() {
         onRecovered={() => setRecovery(false)}
       />
     );
-  const actual=realized(data.transactions,planning.data.card_purchases,month,today());
-  const totals={...actual,result:actual.income-actual.expense,saved:actual.income>0?(actual.income-actual.expense)*100/actual.income:null};
+  const actual = realized(
+    data.transactions,
+    planning.data.card_purchases,
+    month,
+    today(),
+  );
+  const totals = {
+    ...actual,
+    result: actual.income - actual.expense,
+    saved:
+      actual.income > 0
+        ? ((actual.income - actual.expense) * 100) / actual.income
+        : null,
+  };
   const balances = balanceSummary(data.accounts, data.transactions);
   const reserveAccounts = data.accounts.filter(isReserveAccount);
   const sorted = [...data.transactions].sort(
@@ -174,15 +198,24 @@ export default function App() {
     .filter((c) => c.type === "expense")
     .map((c) => ({
       name: c.name,
-      cents: data.transactions
-        .filter(
-          (t) =>
-            t.type === "expense" &&
-            t.transaction_date <= today() &&
-            t.category_id === c.id &&
-            t.transaction_date.startsWith(month),
-        )
-        .reduce((sum, t) => sum + t.amount_cents, 0) + planning.data.card_purchases.filter(p=>p.category_id===c.id && p.purchase_date<=today()&&p.purchase_date.startsWith(month)).reduce((s,p)=>s+p.amount_cents,0),
+      cents:
+        data.transactions
+          .filter(
+            (t) =>
+              t.type === "expense" &&
+              isRealized(t) &&
+              t.category_id === c.id &&
+              t.transaction_date.startsWith(month),
+          )
+          .reduce((sum, t) => sum + t.amount_cents, 0) +
+        planning.data.card_purchases
+          .filter(
+            (p) =>
+              p.category_id === c.id &&
+              p.purchase_date <= today() &&
+              p.purchase_date.startsWith(month),
+          )
+          .reduce((s, p) => s + p.amount_cents, 0),
     }))
     .filter((c) => c.cents > 0)
     .sort((a, b) => b.cents - a.cents);
@@ -192,7 +225,13 @@ export default function App() {
   const evolution = Array.from({ length: 6 }, (_, i) => {
     const date = new Date(selectedYear, selectedMonth - 6 + i, 1);
     const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return { period, ...monthly(data.transactions, period) };
+    const values = realized(
+      data.transactions,
+      planning.data.card_purchases,
+      period,
+      today(),
+    );
+    return { period, ...values, result: values.income - values.expense };
   }).filter((m) => m.income || m.expense);
   async function remove(table: Table, id: string) {
     if (
@@ -246,6 +285,36 @@ export default function App() {
       setOperation(false);
     }
   }
+  function resolveCommitment(c: Commitment) {
+    const transaction = data.transactions.find(
+      (t) => t.id === c.entity && t.status === "pending",
+    );
+    if (transaction) {
+      setFinancialAction({ kind: "resolve", transaction });
+      return;
+    }
+    if (c.source === "card") {
+      const card = planning.data.credit_cards.find((x) => x.id === c.entity);
+      const invoice = invoices(
+        planning.data.credit_cards,
+        planning.data.card_purchases,
+        planning.data.card_invoices,
+        planning.data.card_payments,
+      ).find((i) => i.card_id === c.entity && i.month === c.due.slice(0, 7));
+      if (card && invoice)
+        setPlanningAction({ kind: "cardPayment", card, invoice });
+    } else if (c.source === "debt")
+      setPlanningAction({
+        kind: "debtPayment",
+        debt: planning.data.debts.find((d) => d.id === c.entity),
+      });
+    else if (c.source === "recurring")
+      setPlanningAction({
+        kind: "occurrence",
+        rule: planning.data.recurring_items.find((r) => r.id === c.entity),
+        due: c.due,
+      });
+  }
   function rows(transactions: Transaction[]) {
     return transactions.map((t) => (
       <div className="movement" key={t.id}>
@@ -261,7 +330,16 @@ export default function App() {
             {t.type === "transfer"
               ? ` → ${accountName(t.destination_account_id)}`
               : ` · ${categoryName(t.category_id)}`}
-            {t.is_recurring ? " · Recorrente" : ""} · {t.transaction_date>today()?'PREVISTO':'REALIZADO'}
+            {t.is_recurring ? " · Recorrente" : ""} ·{" "}
+            <Status
+              state={
+                t.status === "pending"
+                  ? t.transaction_date > today()
+                    ? "forecast"
+                    : "pending"
+                  : "realized"
+              }
+            />
           </small>
         </div>
         <div className="row-end">
@@ -270,25 +348,33 @@ export default function App() {
               (t.type === "expense" ? "−" : t.type === "income" ? "+" : "")}
             {money(t.amount_cents)}
           </strong>
-          <small>{t.type==='card_payment'?'Pagamento de fatura':labels[t.type]}</small>
-          {!t.payment_reference && <div className="actions">
-            <button onClick={() => setEditor({ kind: "transaction", row: t })}>
-              Editar
-            </button>
-            <button
-              disabled={operation}
-              onClick={() => void remove("transactions", t.id)}
-            >
-              Excluir
-            </button>
-          </div>}
+          <small>
+            {t.type === "card_payment" ? "Pagamento de fatura" : labels[t.type]}
+          </small>
+          {!t.payment_reference && t.type !== "adjustment" && (
+            <div className="actions">
+              <button
+                onClick={() => setEditor({ kind: "transaction", row: t })}
+              >
+                Editar
+              </button>
+              <button
+                disabled={operation}
+                onClick={() => void remove("transactions", t.id)}
+              >
+                Excluir
+              </button>
+            </div>
+          )}
         </div>
       </div>
     ));
   }
   function goals(limit?: number) {
     return data.goals
-      .filter((g) => !g.is_emergency_reserve && (page === "goals" || g.is_active))
+      .filter(
+        (g) => !g.is_emergency_reserve && (page === "goals" || g.is_active),
+      )
       .slice(0, limit)
       .map((g) => {
         const p = goalProgress(g, data.goal_contributions);
@@ -418,7 +504,55 @@ export default function App() {
               <>
                 <div className="eyebrow">SEU DINHEIRO, COM DIREÇÃO</div>
                 <h1>Um passo de cada vez.</h1>
-                <HomeClarity data={data} plan={planning.data} money={money} onPlan={()=>setPage('planning')} onNew={()=>setQuick(true)}/>
+                <HomeClarity
+                  data={data}
+                  plan={planning.data}
+                  money={money}
+                  onPlan={() => setPage("planning")}
+                  onNew={() => setQuick(true)}
+                  onResolve={resolveCommitment}
+                  onSetup={() => setSetup(true)}
+                />
+                <div className="section-heading">
+                  <h2>Onde está seu dinheiro</h2>
+                  <button onClick={() => setPage("settings")}>Gerenciar</button>
+                </div>
+                {!data.accounts.length ? (
+                  <Empty
+                    text="Crie sua primeira conta para começar a registrar."
+                    action="Criar conta"
+                    onClick={() => setEditor({ kind: "account" })}
+                  />
+                ) : (
+                  data.accounts.map((a) => (
+                    <div className="account-line" key={a.id}>
+                      <div>
+                        <strong>{a.name}</strong>
+                        <small>
+                          {accountTypes[a.type]}
+                          {!a.is_active && " · Arquivada"}
+                        </small>
+                      </div>
+                      <strong>{money(balance(a, data.transactions))}</strong>
+                    </div>
+                  ))
+                )}
+                {data.goals.some((g) => g.is_active) && (
+                  <>
+                    <div className="section-heading">
+                      <h2>Seus objetivos</h2>
+                      <button onClick={() => setPage("goals")}>
+                        Ver todos
+                      </button>
+                    </div>
+                    {goals(3)}
+                  </>
+                )}
+              </>
+            )}
+            {page === "history" && (
+              <>
+                <h1>Movimentações</h1>
                 <div className="section-heading">
                   <h2>Seu mês · realizado</h2>
                   <input
@@ -475,57 +609,7 @@ export default function App() {
                     ))}
                   </details>
                 )}
-                <div className="section-heading">
-                  <h2>Onde está seu dinheiro</h2>
-                  <button onClick={() => setPage("settings")}>Gerenciar</button>
-                </div>
-                {!data.accounts.length ? (
-                  <Empty
-                    text="Crie sua primeira conta para começar a registrar."
-                    action="Criar conta"
-                    onClick={() => setEditor({ kind: "account" })}
-                  />
-                ) : (
-                  data.accounts.map((a) => (
-                    <div className="account-line" key={a.id}>
-                      <div>
-                        <strong>{a.name}</strong>
-                        <small>
-                          {accountTypes[a.type]}
-                          {!a.is_active && " · Arquivada"}
-                        </small>
-                      </div>
-                      <strong>{money(balance(a, data.transactions))}</strong>
-                    </div>
-                  ))
-                )}
-                <div className="section-heading">
-                  <h2>Últimas movimentações</h2>
-                  <button onClick={() => setPage("history")}>Ver todas</button>
-                </div>
-                {sorted.length ? (
-                  rows(sorted.slice(0, 5))
-                ) : (
-                  <p className="muted">
-                    Sua primeira movimentação aparecerá aqui.
-                  </p>
-                )}
-                {data.goals.some((g) => g.is_active) && (
-                  <>
-                    <div className="section-heading">
-                      <h2>Seus objetivos</h2>
-                      <button onClick={() => setPage("goals")}>
-                        Ver todos
-                      </button>
-                    </div>
-                    {goals(3)}
-                  </>
-                )}
-              </>
-            )}
-            {page === "history" && (
-              <>
-                <h1>Movimentações</h1>
+
                 <div className="filters">
                   <Field label="Mês">
                     <input
@@ -561,15 +645,13 @@ export default function App() {
                     </select>
                   </Field>
                 </div>
-                <button
-                  className="primary"
-                  onClick={() => setQuick(true)}
-                >
+                <button className="primary" onClick={() => setQuick(true)}>
                   + Adicionar
                 </button>
                 {(() => {
                   const filtered = sorted.filter(
                     (t) =>
+                      isRealized(t) &&
                       (!historyMonth ||
                         t.transaction_date.startsWith(historyMonth)) &&
                       (!filterType || t.type === filterType) &&
@@ -643,6 +725,9 @@ export default function App() {
             {page === "settings" && (
               <>
                 <h1>Ajustes</h1>
+                <button onClick={() => setSetup(true)}>
+                  Configuração rápida
+                </button>
                 <p className="muted">{session.user.email}</p>
                 <div className="section-heading">
                   <h2>Contas</h2>
@@ -664,6 +749,13 @@ export default function App() {
                         onClick={() => setEditor({ kind: "account", row: a })}
                       >
                         Editar
+                      </button>
+                      <button
+                        onClick={() =>
+                          setFinancialAction({ kind: "adjust", account: a })
+                        }
+                      >
+                        Ajustar saldo atual
                       </button>
                       <button
                         disabled={operation}
@@ -720,10 +812,34 @@ export default function App() {
                 >
                   Sair da conta
                 </button>
-                <small className="muted">Rota Financeira · v0.2</small>
+                <small className="muted">
+                  Rota Financeira · v0.2 ·{" "}
+                  {typeof __RELEASE_COMMIT__ !== "undefined"
+                    ? __RELEASE_COMMIT__.slice(0, 7)
+                    : "local"}
+                </small>
               </>
             )}
           </div>
+        )}
+        {!error && (
+          <PlanningWorkspace
+            data={data}
+            plan={planning.data}
+            money={money}
+            hidden={valuesHidden}
+            visible={page === "planning"}
+            action={planningAction}
+            setAction={setPlanningAction}
+            onResolve={resolveCommitment}
+            onSchedule={(transaction) =>
+              setFinancialAction({ kind: "schedule", transaction })
+            }
+            onSaved={async () => {
+              await refresh();
+              setNotice("Salvo com sucesso. Planejamento atualizado.");
+            }}
+          />
         )}
       </main>
       <nav aria-label="Navegação principal">
@@ -741,26 +857,30 @@ export default function App() {
             aria-current={page === id ? "page" : undefined}
             disabled={id === "add" && (loading || !!error)}
             className={`${page === id ? "selected" : ""} ${id === "add" ? "add" : ""}`}
-            onClick={() =>
-              id === "add" ? setQuick(true) : setPage(id)
-            }
+            onClick={() => (id === "add" ? setQuick(true) : setPage(id))}
           >
             <span aria-hidden="true">{icon}</span>
             <small>
-              {id === "history" ? "Movimentos" : id === "add" ? "Novo" : id==='goals'?'Metas':label}
+              {id === "history"
+                ? "Movimentos"
+                : id === "add"
+                  ? "Novo"
+                  : id === "goals"
+                    ? "Metas"
+                    : label}
             </small>
           </button>
         ))}
       </nav>
       {editor && (
         <EditorForm
-          key={`${editor.kind}:${'row' in editor?editor.row?.id??'new':'new'}`}
+          key={`${editor.kind}:${"row" in editor ? (editor.row?.id ?? "new") : "new"}`}
           editor={editor}
           valuesHidden={valuesHidden}
           data={data}
           onClose={() => setEditor(null)}
-          onSaved={async (accountId?:string) => {
-            if(accountId)lastAccount.current=accountId;
+          onSaved={async (accountId?: string) => {
+            if (accountId) lastAccount.current = accountId;
             setEditor(null);
             await refresh();
             setNotice(
@@ -769,8 +889,79 @@ export default function App() {
           }}
         />
       )}
-      {!error&&!loading&&<div className={page==='planning'?'planning-container':'planning-hidden'}><PlanningWorkspace data={data} plan={planning.data} money={money} hidden={valuesHidden} visible={page==='planning'} action={planningAction} setAction={setPlanningAction} onSaved={async()=>{await refresh();setNotice('Salvo com sucesso. Planejamento atualizado.');}}/></div>}
-      {quick&&<QuickActions onClose={()=>setQuick(false)} onSelect={kind=>{setQuick(false);if(['income','expense','transfer'].includes(kind))setEditor({kind:'transaction',initialType:kind as 'income'|'expense'|'transfer',accountId:lastAccount.current});else if(kind==='contribution'){setPage('goals');setNotice('Escolha + Aporte na meta desejada. Para mover dinheiro entre contas, use Transferência.');}else setPlanningAction({kind:kind as 'purchase'|'debtPayment'});}}/>}
+      {financialAction && (
+        <FinancialActions
+          key={
+            financialAction.kind +
+            ("transaction" in financialAction
+              ? (financialAction.transaction?.id ?? "")
+              : "")
+          }
+          action={financialAction}
+          data={data}
+          hidden={valuesHidden}
+          onClose={() => setFinancialAction(null)}
+          onSaved={refresh}
+        />
+      )}
+      {setup && (
+        <QuickSetup
+          data={data}
+          plan={planning.data}
+          paused={!!editor || !!planningAction || !!financialAction}
+          onClose={() => {
+            setSetup(false);
+            setPage("home");
+          }}
+          onAction={(kind) => {
+            if (kind === "account") setEditor({ kind: "account" });
+            else if (kind === "schedule")
+              setFinancialAction({ kind: "schedule" });
+            else if (kind.startsWith("adjust:")) {
+              const account = data.accounts.find((a) => a.id === kind.slice(7));
+              if (account) setFinancialAction({ kind: "adjust", account });
+            } else if (kind.startsWith("invoice:")) {
+              const card = planning.data.credit_cards.find(
+                (c) => c.id === kind.slice(8),
+              );
+              if (card) setPlanningAction({ kind: "invoice", card });
+            } else
+              setPlanningAction({
+                kind:
+                  kind === "salary"
+                    ? "recurring"
+                    : (kind as PlanningAction["kind"]),
+                initialType: kind === "salary" ? "income" : "expense",
+              });
+          }}
+        />
+      )}
+      {quick && (
+        <QuickActions
+          goals={data.goals.filter(
+            (g) => g.is_active && !g.is_emergency_reserve,
+          )}
+          onClose={() => setQuick(false)}
+          onSelect={(kind) => {
+            setQuick(false);
+            if (["income", "expense", "transfer"].includes(kind))
+              setEditor({
+                kind: "transaction",
+                initialType: kind as "income" | "expense" | "transfer",
+                accountId: lastAccount.current,
+              });
+            else if (kind === "schedule")
+              setFinancialAction({ kind: "schedule" });
+            else if (kind.startsWith("contribution:")) {
+              const goal = data.goals.find((g) => g.id === kind.slice(13));
+              if (goal) setEditor({ kind: "contribution", goal });
+            } else
+              setPlanningAction({
+                kind: kind as "purchase" | "debtPayment" | "installment",
+              });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -954,7 +1145,7 @@ function EditorForm({
   valuesHidden: boolean;
   data: ReturnType<typeof useFinance>["data"];
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (accountId?: string) => Promise<void>;
 }) {
   const row = "row" in editor ? editor.row : undefined;
   const transaction = editor.kind === "transaction" ? editor.row : undefined;
@@ -962,7 +1153,9 @@ function EditorForm({
     transaction?.type ??
       (editor.kind === "category"
         ? (editor.row?.type ?? "expense")
-        : "expense"),
+        : editor.kind === "transaction"
+          ? (editor.initialType ?? "expense")
+          : "expense"),
   );
   const [recurring, setRecurring] = useState(
     transaction?.is_recurring ?? false,
@@ -973,6 +1166,7 @@ function EditorForm({
   const [closing, setClosing] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draftId] = useState(() => crypto.randomUUID());
+  const [ruleId] = useState(() => crypto.randomUUID());
   useEffect(() => {
     const d = dialogRef.current;
     d?.showModal();
@@ -1019,7 +1213,7 @@ function EditorForm({
         payload = {
           name: str("name"),
           type: str("account_type"),
-          initial_balance_cents: cents("initial"),
+          ...(!editor.row ? { initial_balance_cents: cents("initial") } : {}),
         };
       } else if (editor.kind === "category") {
         table = "categories";
@@ -1058,8 +1252,14 @@ function EditorForm({
           category_id: type === "transfer" ? null : str("category"),
           description: str("description"),
           transaction_date: str("date"),
-          is_recurring: recurring,
-          recurrence_frequency: recurring ? str("frequency") : null,
+          ...(!transaction
+            ? { status: str("date") > today() ? "pending" : "realized" }
+            : {}),
+          is_recurring: type !== "transfer" && recurring,
+          recurrence_frequency:
+            type !== "transfer" && recurring
+              ? (transaction?.recurrence_frequency ?? str("frequency"))
+              : null,
         };
         if (
           type === "transfer" &&
@@ -1069,6 +1269,21 @@ function EditorForm({
       }
       if ("amount_cents" in payload && Number(payload.amount_cents) <= 0)
         throw new Error("Informe um valor maior que zero.");
+      if (
+        editor.kind === "transaction" &&
+        type !== "transfer" &&
+        recurring &&
+        !row
+      ) {
+        await rpc("repeat_transaction", {
+          p_id: draftId,
+          p_rule: ruleId,
+          p_payload: payload,
+          p_existing: false,
+        });
+        closeWithMotion(() => void onSaved(String(payload.account_id)));
+        return;
+      }
       // A stable UUID makes retrying after a lost network response idempotent.
       const result = row
         ? await supabase!
@@ -1083,7 +1298,14 @@ function EditorForm({
       if (result.error) throw result.error;
       if (!result.data.length)
         throw new Error("Registro não encontrado. Atualize os dados.");
-      closeWithMotion(() => void onSaved());
+      closeWithMotion(
+        () =>
+          void onSaved(
+            editor.kind === "transaction"
+              ? String(payload.account_id)
+              : undefined,
+          ),
+      );
     } catch (e) {
       setError(explain(e));
       setBusy(false);
@@ -1176,21 +1398,21 @@ function EditorForm({
                   ))}
                 </select>
               </Field>
-              <Field label="Saldo inicial (R$)">
-                <input
-                  required
-                  name="initial"
-                  inputMode="decimal"
-                  type={valuesHidden ? "password" : "text"}
-                  autoComplete="off"
-                  defaultValue={inputMoney(
-                    editor.row?.initial_balance_cents ?? 0,
-                  )}
-                />
-              </Field>
+              {!editor.row && (
+                <Field label="Saldo atual (R$)">
+                  <input
+                    required
+                    name="initial"
+                    inputMode="decimal"
+                    type={valuesHidden ? "password" : "text"}
+                    autoComplete="off"
+                    defaultValue={inputMoney(0)}
+                  />
+                </Field>
+              )}
               <small>
-                Alterar o saldo inicial recalcula o saldo atual. Os lançamentos
-                continuam preservados.
+                Para sincronizar uma conta existente, use Ajustar saldo atual. O
+                histórico fica preservado.
               </small>
             </>
           )}
@@ -1236,7 +1458,12 @@ function EditorForm({
                   required
                   name="account"
                   defaultValue={
-                    transaction?.account_id ?? accounts[0]?.id ?? ""
+                    transaction?.account_id ??
+                    (editor.kind === "transaction" &&
+                    accounts.some((a) => a.id === editor.accountId)
+                      ? editor.accountId
+                      : accounts[0]?.id) ??
+                    ""
                   }
                 >
                   {!accounts.length && (
@@ -1310,11 +1537,12 @@ function EditorForm({
               </Field>
             </>
           )}
-          {editor.kind === "transaction" && (
+          {editor.kind === "transaction" && type !== "transfer" && (
             <>
               <label className="checkbox">
                 <input
                   type="checkbox"
+                  disabled={!!transaction}
                   checked={recurring}
                   onChange={(e) => setRecurring(e.target.checked)}
                 />{" "}
@@ -1325,6 +1553,7 @@ function EditorForm({
                   <Field label="Frequência">
                     <select
                       name="frequency"
+                      disabled={!!transaction}
                       defaultValue={
                         transaction?.recurrence_frequency ?? "monthly"
                       }
@@ -1335,7 +1564,9 @@ function EditorForm({
                     </select>
                   </Field>
                   <small>
-                    A marcação não cria lançamentos automaticamente.
+                    {transaction
+                      ? "Gerencie a regra em Planejar → Recorrentes."
+                      : "Cria uma regra de previsão. Esta primeira ocorrência já fica registrada, sem duplicar o lançamento."}
                   </small>
                 </>
               )}

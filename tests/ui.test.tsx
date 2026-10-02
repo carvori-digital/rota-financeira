@@ -7,7 +7,13 @@ import {
   it,
   vi,
 } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  cleanup,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../src/App";
 import { act } from "react";
@@ -70,6 +76,17 @@ vi.mock("../src/lib/supabase", () => ({
         backend.authCalls.push({ kind: "password", payload });
         return { error: null };
       },
+    },
+    rpc: async (name: string, args: Row) => {
+      backend.writes.push({ rpc: name, ...args });
+      if (name === "resolve_transaction") {
+        const t = backend.rows.transactions.find((t) => t.id === args.p_id);
+        if (t && t.status === "pending") {
+          t.status = args.p_cancel ? "cancelled" : "realized";
+          if (!args.p_cancel) t.transaction_date = args.p_date;
+        }
+      }
+      return { data: args.p_id, error: null };
     },
     from: (table: string) => {
       let mode = "read";
@@ -187,6 +204,15 @@ beforeEach(() => {
     transactions: [],
     goals: [],
     goal_contributions: [],
+    recurring_items: [],
+    recurring_occurrences: [],
+    credit_cards: [],
+    card_purchases: [],
+    card_invoices: [],
+    card_payments: [],
+    debts: [],
+    debt_payments: [],
+    reserve_account_links: [],
   };
 });
 afterEach(cleanup);
@@ -246,14 +272,20 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
       screen.getByRole("button", { name: "Início", exact: true }),
     );
     expect(
-      (screen.getByLabelText("Mês do resumo") as HTMLInputElement).value,
-    ).toBe(today().slice(0, 7));
+      screen.getByText("Livre depois dos compromissos · mês atual").textContent,
+    ).toContain("mês atual");
   });
   it("repetir após resposta perdida não duplica lançamento já gravado", async () => {
     const user = await open();
     backend.lostResponse = true;
     await user.click(
       screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Despesa",
+        exact: true,
+      }),
     );
     await user.type(screen.getByLabelText("Valor (R$)"), "10");
     await user.selectOptions(screen.getByLabelText("Categoria"), "c");
@@ -280,8 +312,8 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
         amount_cents: 1000,
         description: "Compra fixture",
         transaction_date: today(),
-        is_recurring: false,
-        recurrence_frequency: null,
+        is_recurring: true,
+        recurrence_frequency: "monthly",
         created_at: new Date().toISOString(),
       },
     ];
@@ -299,6 +331,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     );
     await screen.findByText(/Salvo com sucesso/);
     expect(backend.rows.transactions[0].amount_cents).toBe(2000);
+    expect(backend.rows.transactions[0].recurrence_frequency).toBe("monthly");
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     await user.click(
       screen.getByRole("button", { name: "Excluir", exact: true }),
@@ -311,6 +344,12 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     const user = await open();
     await user.click(
       screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Despesa",
+        exact: true,
+      }),
     );
     await user.type(screen.getByLabelText("Valor (R$)"), "12,34");
     await user.selectOptions(screen.getByLabelText("Categoria"), "c");
@@ -356,6 +395,12 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     backend.writeError = true;
     await user.click(
       screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Despesa",
+        exact: true,
+      }),
     );
     await user.type(screen.getByLabelText("Valor (R$)"), "10");
     await user.selectOptions(screen.getByLabelText("Categoria"), "c");
@@ -497,10 +542,12 @@ describe("disponível, reserva e privacidade", () => {
     fixtures();
     const user = await open();
     expect(
-      screen.getByText("Saldo disponível").parentElement?.querySelector("h2")
-        ?.textContent,
+      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
     ).toMatch(/110,00/);
-    expect(screen.getByText("Patrimônio total").textContent).toMatch(/610,00/);
+    expect(
+      screen.getByText("Patrimônio total nas contas").parentElement
+        ?.textContent,
+    ).toMatch(/610,00/);
     await user.click(
       screen.getByRole("button", { name: "Adicionar", exact: true }),
     );
@@ -514,18 +561,23 @@ describe("disponível, reserva e privacidade", () => {
     );
     await screen.findByText(/Salvo com sucesso/);
     expect(
-      screen.getByText("Saldo disponível").parentElement?.querySelector("h2")
-        ?.textContent,
+      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
     ).toMatch(/85,00/);
-    expect(screen.getByText("Investimentos e reserva").textContent).toMatch(
-      /525,00/,
-    );
-    expect(screen.getByText("Patrimônio total").textContent).toMatch(/610,00/);
+    expect(
+      screen.getByText("Investimentos e reserva").parentElement?.textContent,
+    ).toMatch(/525,00/);
+    expect(
+      screen.getByText("Patrimônio total nas contas").parentElement
+        ?.textContent,
+    ).toMatch(/610,00/);
     await user.click(
-      screen.getByRole("button", {
-        name: "Investimentos e Reserva",
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Planejar",
         exact: true,
       }),
+    );
+    await user.click(
+      screen.getByRole("tab", { name: "Investimentos/Reserva" }),
     );
     expect(
       screen.getByRole("heading", { name: "Investimentos e Reserva" }),
@@ -535,9 +587,8 @@ describe("disponível, reserva e privacidade", () => {
     expect(screen.queryByText("Principal")).toBeNull();
     expect(screen.queryByText("Meta fixture")).toBeNull();
     expect(
-      screen
-        .getByText("Total em investimentos e reserva")
-        .parentElement?.querySelector("h2")?.textContent,
+      screen.getByText("Total em investimentos e reserva").parentElement
+        ?.textContent,
     ).toMatch(/525,00/);
   });
   it("oculta todas as páginas e inputs, preserva edição e salva só a preferência", async () => {
@@ -550,24 +601,20 @@ describe("disponível, reserva e privacidade", () => {
     );
     expect(document.body.textContent).not.toMatch(/R\$/);
     expect(document.querySelector("progress")).toBeNull();
-    for (const page of [
-      "Investimentos e Reserva",
-      "Movimentações",
-      "Objetivos",
-      "Ajustes",
-    ]) {
-      await user.click(screen.getByRole("button", { name: page, exact: true }));
+    for (const page of ["Planejar", "Movimentações", "Objetivos", "Ajustes"]) {
+      await user.click(
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name: page,
+          exact: true,
+        }),
+      );
       expect(document.body.textContent).not.toMatch(/R\$/);
       expect(document.body.textContent).not.toMatch(/\d+%/);
     }
     await user.click(
       screen.getAllByRole("button", { name: "Editar", exact: true })[0],
     );
-    const initial = screen.getByLabelText(
-      "Saldo inicial (R$)",
-    ) as HTMLInputElement;
-    expect(initial.type).toBe("password");
-    expect(initial.value).toBe("100,00");
+    expect(screen.queryByLabelText("Saldo inicial (R$)")).toBeNull();
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
     );
@@ -640,6 +687,27 @@ describe("disponível, reserva e privacidade", () => {
 });
 
 describe("navegação mobile e movimento reduzido", () => {
+  it("fecha o editor com animação e aguarda desmontagem antes de abrir outro modal", async () => {
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Despesa",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    expect(screen.getByRole("dialog").className).toBe("is-closing");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
   it("mantém os seis destinos e nomes acessíveis com rótulos curtos", async () => {
     await open();
     const nav = screen.getByRole("navigation", { name: "Navegação principal" });
@@ -652,13 +720,13 @@ describe("navegação mobile e movimento reduzido", () => {
       screen.getByRole("button", { name: "Adicionar", exact: true })
         .textContent,
     ).toContain("Novo");
-    for (const name of [
-      "Início",
-      "Investimentos e Reserva",
-      "Objetivos",
-      "Ajustes",
-    ])
-      expect(screen.getByRole("button", { name, exact: true })).toBeTruthy();
+    for (const name of ["Início", "Planejar", "Objetivos", "Ajustes"])
+      expect(
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name,
+          exact: true,
+        }),
+      ).toBeTruthy();
   });
   it("fecha modal imediatamente quando movimento reduzido está ativo", async () => {
     const original = window.matchMedia;
@@ -670,6 +738,13 @@ describe("navegação mobile e movimento reduzido", () => {
       );
       expect(screen.getByRole("dialog")).toBeTruthy();
       await user.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "Despesa",
+          exact: true,
+        }),
+      );
+      expect(screen.getByRole("dialog", { name: "Movimentação" })).toBeTruthy();
+      await user.click(
         screen.getByRole("button", { name: "Fechar", exact: true }),
       );
       expect(screen.queryByRole("dialog")).toBeNull();
@@ -677,5 +752,207 @@ describe("navegação mobile e movimento reduzido", () => {
     } finally {
       vi.stubGlobal("matchMedia", original);
     }
+  });
+});
+
+describe("integração V0.2", () => {
+  it("Novo escolhe receita e lembra a conta usada para o próximo registro", async () => {
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    expect(
+      within(screen.getByRole("dialog")).getAllByRole("button"),
+    ).toHaveLength(9);
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Receita",
+        exact: true,
+      }),
+    );
+    await user.type(screen.getByLabelText("Valor (R$)"), "100");
+    await user.selectOptions(screen.getByLabelText("Categoria"), "d");
+    await user.selectOptions(screen.getByLabelText("Conta"), "b");
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await screen.findByText(/Salvo com sucesso/);
+    expect(backend.rows.transactions[0].type).toBe("income");
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Despesa",
+        exact: true,
+      }),
+    );
+    expect((screen.getByLabelText("Conta") as HTMLSelectElement).value).toBe(
+      "b",
+    );
+    expect(screen.getByRole("option", { name: "Alimentação" })).toBeTruthy();
+  });
+  it("compra sem cartão oferece cadastro direto e pode fechar sem gravar", async () => {
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Compra no cartão",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar cartão", exact: true }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Adicionar cartão" }),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(backend.writes).toHaveLength(0);
+  });
+  it("Planejar reúne as cinco áreas e aporte abre a meta escolhida", async () => {
+    backend.rows.goals = [
+      {
+        id: "g",
+        name: "Viagem",
+        target_amount_cents: 10000,
+        initial_amount_cents: 0,
+        is_active: true,
+      },
+    ];
+    const user = await open();
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Planejar",
+        exact: true,
+      }),
+    );
+    for (const name of [
+      "Próximos meses",
+      "Cartões",
+      "Dívidas / Parcelas",
+      "Recorrentes",
+      "Investimentos/Reserva",
+    ]) {
+      await user.click(screen.getByRole("tab", { name, exact: true }));
+      expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+        screen.getByRole("tab", { name, exact: true }).id,
+      );
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Aporte/transferência",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Aportar em Viagem", exact: true }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Registrar aporte" }),
+    ).toBeTruthy();
+  });
+});
+
+describe("clareza financeira integrada", () => {
+  it("pendente vencido não muda caixa; confirmar retira compromisso e muda saldo uma vez", async () => {
+    backend.rows.transactions = [
+      {
+        id: "scheduled",
+        user_id: "user-a",
+        account_id: "a",
+        category_id: "c",
+        destination_account_id: null,
+        type: "expense",
+        status: "pending",
+        amount_cents: 1000,
+        description: "Tarifa pendente",
+        transaction_date: "2020-01-01",
+        created_at: "",
+        is_recurring: false,
+        planning_group: "other",
+      },
+    ];
+    const user = await open();
+    expect(
+      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+    ).toMatch(/100,00/);
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Planejar",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar / cancelar", exact: true }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Salvar",
+        exact: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(backend.rows.transactions[0].status).toBe("realized"),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      screen.queryByRole("button", {
+        name: "Confirmar / cancelar",
+        exact: true,
+      }),
+    ).toBeNull();
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Início",
+        exact: true,
+      }),
+    );
+    expect(
+      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+    ).toMatch(/90,00/);
+    expect(
+      backend.writes.filter((w) => w.rpc === "resolve_transaction"),
+    ).toHaveLength(1);
+  });
+  it("configuração rápida mantém etapa ao abrir formulário e pré-seleciona salário", async () => {
+    const user = await open();
+    await user.click(
+      screen.getByRole("button", { name: "Configuração rápida", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar conta", exact: true }),
+    );
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Fechar",
+        exact: true,
+      }),
+    );
+    await screen.findByRole("dialog", { name: "Configuração rápida" });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continuar / pular etapa",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Cadastrar renda recorrente",
+        exact: true,
+      }),
+    );
+    expect((screen.getByLabelText("Tipo") as HTMLSelectElement).value).toBe(
+      "income",
+    );
   });
 });

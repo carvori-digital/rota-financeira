@@ -19,7 +19,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|icons/|manifest.webmanifest|sw.js).*)",
+      "source": "/((?!assets/|icons/|manifest.webmanifest|sw.js|release.json).*)",
       "destination": "/index.html"
     }
   ]
