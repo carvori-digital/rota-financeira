@@ -6,6 +6,32 @@ import {
   cloneElement,
   isValidElement,
 } from "react";
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  ArrowLeftRight,
+  CalendarPlus,
+  CreditCard,
+  Wallet,
+  Landmark,
+  Target,
+} from "lucide-react";
+function QuickActionIcon({ kind }: { kind: string }) {
+  const Icon =
+    (
+      {
+        expense: ArrowUpRight,
+        income: ArrowDownLeft,
+        transfer: ArrowLeftRight,
+        schedule: CalendarPlus,
+        purchase: CreditCard,
+        payment: Wallet,
+        installment: Landmark,
+        contribution: Target,
+      } as Record<string, typeof Wallet>
+    )[kind] ?? Wallet;
+  return <Icon size={24} strokeWidth={1.8} aria-hidden="true" />;
+}
 import type { ReactNode, ReactElement, FormEvent } from "react";
 import { inputMoney, parseMoney } from "../../utils/finance";
 export type Money = (cents: number) => ReactNode;
@@ -166,13 +192,16 @@ export function QuickActions({
   onSelect,
   onClose,
   goals = [],
+  invoices = [],
 }: {
   onSelect: (kind: string) => void;
   onClose: () => void;
   goals?: { id: string; name: string }[];
+  invoices?: { id: string; name: string }[];
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [contribution, setContribution] = useState(false);
+  const [payment, setPayment] = useState(false);
   useEffect(() => {
     ref.current?.showModal();
   }, []);
@@ -187,50 +216,80 @@ export function QuickActions({
     >
       <div className="section-heading">
         <h2>
-          {contribution ? "Aporte ou transferência" : "O que deseja registrar?"}
+          {contribution
+            ? "Aporte ou transferência"
+            : payment
+              ? "Pagamento"
+              : "Novo movimento"}
         </h2>
         <button aria-label="Fechar" onClick={onClose}>
           ×
         </button>
       </div>
       <div className="quick-actions">
-        {(contribution
+        {(payment
           ? [
-              ["transfer", "Transferir entre contas"],
-              ...goals.map((g) => [
-                `contribution:${g.id}`,
-                `Aportar em ${g.name}`,
+              ["debtPayment", "Pagamento de dívida"],
+              ...invoices.map((i) => [
+                `cardPayment:${i.id}`,
+                `Pagar ${i.name}`,
               ]),
             ]
-          : [
-              ["income", "Receita"],
-              ["expense", "Despesa"],
-              ["schedule", "Agendar receita/despesa"],
-              ["transfer", "Transferência"],
-              ["purchase", "Compra no cartão"],
-              ["installment", "Dívida / parcelamento"],
-              ["debtPayment", "Pagamento de dívida"],
-              ["contribution", "Aporte/transferência"],
-            ]
+          : contribution
+            ? [
+                ["transfer", "Transferir entre contas"],
+                ...goals.map((g) => [
+                  `contribution:${g.id}`,
+                  `Aportar em ${g.name}`,
+                ]),
+              ]
+            : [
+                ["expense", "Despesa"],
+                ["income", "Receita"],
+                ["transfer", "Transferência"],
+                ["schedule", "Programar"],
+                ["purchase", "Compra no cartão"],
+                ["payment", "Pagamento"],
+                ["installment", "Dívida / parcelamento"],
+                ["contribution", "Aporte/transferência"],
+              ]
         ).map(([kind, label]) => (
           <button
             key={kind}
             onClick={() =>
-              kind === "contribution" ? setContribution(true) : onSelect(kind)
+              kind === "contribution"
+                ? setContribution(true)
+                : kind === "payment"
+                  ? setPayment(true)
+                  : onSelect(kind)
             }
           >
-            {label}
-            <span aria-hidden="true">→</span>
+            <QuickActionIcon kind={kind} />
+            <span>{label}</span>
           </button>
         ))}
       </div>
-      {contribution && (
+      {(contribution || payment) && (
         <>
-          <p className="muted">
-            Transferências movimentam dinheiro. Aportes em metas registram
-            progresso.
-          </p>
-          <button onClick={() => setContribution(false)}>Voltar</button>
+          {contribution && (
+            <p className="muted">
+              Transferências movimentam dinheiro. Aportes em metas registram
+              progresso.
+            </p>
+          )}
+          {payment && !invoices.length && (
+            <p className="muted">
+              Sem faturas pendentes. Cartões ficam em Planejar.
+            </p>
+          )}
+          <button
+            onClick={() => {
+              setContribution(false);
+              setPayment(false);
+            }}
+          >
+            Voltar
+          </button>
         </>
       )}
     </dialog>

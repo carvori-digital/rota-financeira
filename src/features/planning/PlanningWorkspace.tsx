@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import type { FinanceData, Transaction } from "../../types";
 import type { PlanningData, Commitment } from "./types";
@@ -12,11 +13,11 @@ import { DebtsPanel } from "../debts/components";
 import { RecurringPanel } from "../recurring/components";
 import { firstInvoiceDate, invoices } from "../cards/calculations";
 import { monthDay } from "./dates";
-import { essentialMonthly } from "../recurring/calculations";
 import { balance, isReserveAccount, today } from "../../utils/finance";
 import { projection } from "./calculations";
+import { experienceReport } from "../experience/calculations";
 import { MonthReport } from "./MonthReport";
-import { ProjectionList } from "./HomeClarity";
+import { ProjectionList } from "./ProjectionList";
 export type PlanningAction = {
   kind:
     | "installment"
@@ -42,6 +43,9 @@ interface Props {
   money: Money;
   hidden: boolean;
   visible: boolean;
+  section: string;
+  onSection: (section: string) => void;
+  goalsContent: ReactNode;
   action: PlanningAction | null;
   setAction: (a: PlanningAction | null) => void;
   onSaved: () => Promise<void>;
@@ -55,14 +59,16 @@ export function PlanningWorkspace(props: Props) {
     money,
     hidden,
     visible,
+    section,
+    onSection: setSection,
+    goalsContent,
     action,
     setAction,
     onSaved,
     onResolve,
     onSchedule,
   } = props;
-  const [section, setSection] = useState("month"),
-    [error, setError] = useState(""),
+  const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function run(fn: () => Promise<unknown>) {
     if (busy) return;
@@ -79,19 +85,11 @@ export function PlanningWorkspace(props: Props) {
       setBusy(false);
     }
   }
-  const reserveGoal = data.goals.find((g) => g.is_emergency_reserve),
-    suggestion = essentialMonthly(plan.recurring_items, today()),
-    cost = reserveGoal?.essential_monthly_cents ?? suggestion,
-    months = reserveGoal?.reserve_months ?? 6;
-  const reserveAccounts = data.accounts.filter(isReserveAccount),
-    selected = reserveGoal
-      ? plan.reserve_account_links
-          .filter((l) => l.goal_id === reserveGoal.id)
-          .map((l) => l.account_id)
-      : reserveAccounts.filter((a) => a.type === "savings").map((a) => a.id);
-  const actual = reserveAccounts
-    .filter((a) => selected.includes(a.id))
-    .reduce((s, a) => s + balance(a, data.transactions), 0);
+  const overview = experienceReport(data, plan, today());
+  const { reserveGoal, cost, selected, protectedMonths } = overview;
+  const months = overview.targetMonths,
+    actual = overview.reserve;
+  const reserveAccounts = data.accounts.filter(isReserveAccount);
   const legacy = data.transactions.filter(
     (t) =>
       t.is_recurring &&
@@ -112,11 +110,13 @@ export function PlanningWorkspace(props: Props) {
           >
             {[
               ["month", "Visão do mês"],
-              ["projection", "Próximos meses"],
+
               ["cards", "Cartões"],
-              ["debts", "Dívidas / Parcelas"],
+              ["debts", "Dívidas e parcelas"],
               ["recurring", "Recorrentes"],
-              ["reserve", "Investimentos/Reserva"],
+              ["scheduled", "Programadas"],
+              ["reserve", "Reserva e investimentos"],
+              ["goals", "Metas"],
             ].map(([key, label]) => (
               <button
                 role="tab"
@@ -147,6 +147,10 @@ export function PlanningWorkspace(props: Props) {
                   money={money}
                   onResolve={onResolve}
                 />
+              </>
+            )}
+            {section === "scheduled" && (
+              <>
                 <div className="section-heading">
                   <h2>Programadas</h2>
                   <button onClick={() => onSchedule()}>
@@ -193,51 +197,58 @@ export function PlanningWorkspace(props: Props) {
                         >
                           Confirmar / cancelar
                         </button>
-                        {!t.is_recurring && (
-                          <button onClick={() => onSchedule(t)}>
-                            Editar programada
-                          </button>
-                        )}
+                        {!t.is_recurring &&
+                          (t.type === "income" || t.type === "expense") && (
+                            <button onClick={() => onSchedule(t)}>
+                              Editar programada
+                            </button>
+                          )}
                       </div>
                     </article>
                   ))}
               </>
             )}
-            {section === "projection" && (
-              <>
-                <p className="muted">
-                  PREVISTO · quatro meses a partir do saldo disponível
-                  realizado. Vencidos ainda pendentes ficam no mês atual.
-                  Valores em contas de investimento/reserva aparecem nos
-                  compromissos, mas não alteram o disponível.
-                </p>
-                <ProjectionList
-                  months={projection(data, plan, today())}
-                  money={money}
-                />
-                {projection(data, plan, today()).map((m) => (
-                  <details key={m.month}>
-                    <summary>
-                      Compromissos · {m.month.split("-").reverse().join("/")}
-                    </summary>
-                    {m.items.map((c) => (
-                      <div className="account-line" key={c.id}>
-                        <div>
-                          <strong>{c.name}</strong>
-                          <small>
-                            {c.due.split("-").reverse().join("/")} ·{" "}
-                            {c.direction === "income" ? "Entrada" : "Saída"}{" "}
-                            <Status
-                              state={c.due <= today() ? "pending" : "forecast"}
-                            />
-                          </small>
+            {section === "goals" && goalsContent}
+            {section === "month" && (
+              <details className="panel">
+                <summary>Próximos meses</summary>
+                <>
+                  <p className="muted">
+                    PREVISTO · quatro meses a partir do saldo disponível
+                    realizado. Vencidos ainda pendentes ficam no mês atual.
+                    Valores em contas de investimento/reserva aparecem nos
+                    compromissos, mas não alteram o disponível.
+                  </p>
+                  <ProjectionList
+                    months={projection(data, plan, today())}
+                    money={money}
+                  />
+                  {projection(data, plan, today()).map((m) => (
+                    <details key={m.month}>
+                      <summary>
+                        Compromissos · {m.month.split("-").reverse().join("/")}
+                      </summary>
+                      {m.items.map((c) => (
+                        <div className="account-line" key={c.id}>
+                          <div>
+                            <strong>{c.name}</strong>
+                            <small>
+                              {c.due.split("-").reverse().join("/")} ·{" "}
+                              {c.direction === "income" ? "Entrada" : "Saída"}{" "}
+                              <Status
+                                state={
+                                  c.due <= today() ? "pending" : "forecast"
+                                }
+                              />
+                            </small>
+                          </div>
+                          <strong>{money(c.amount)}</strong>
                         </div>
-                        <strong>{money(c.amount)}</strong>
-                      </div>
-                    ))}
-                  </details>
-                ))}
-              </>
+                      ))}
+                    </details>
+                  ))}
+                </>
+              </details>
             )}
             {section === "cards" && (
               <CardsPanel
@@ -347,33 +358,62 @@ export function PlanningWorkspace(props: Props) {
                 </div>
                 <article className="panel">
                   <h3>Reserva de emergência</h3>
-                  <dl className="finance-details">
-                    <div>
-                      <dt>
-                        Custo essencial mensal{" "}
-                        {reserveGoal?.essential_monthly_cents == null
-                          ? "(sugerido)"
-                          : "(manual)"}
-                      </dt>
-                      <dd>{money(cost)}</dd>
-                    </div>
-                    <div>
-                      <dt>Meses de proteção desejados</dt>
-                      <dd>{months}</dd>
-                    </div>
-                    <div>
-                      <dt>Reserva recomendada</dt>
-                      <dd>{money(cost * months)}</dd>
-                    </div>
-                    <div>
-                      <dt>Reserva atual</dt>
-                      <dd>{money(actual)}</dd>
-                    </div>
-                    <div>
-                      <dt>Quanto falta</dt>
-                      <dd>{money(Math.max(0, cost * months - actual))}</dd>
-                    </div>
-                  </dl>
+                  <div className="reserve-protection">
+                    <strong>
+                      {hidden
+                        ? "••••"
+                        : protectedMonths === null
+                          ? "Configure o custo mensal"
+                          : protectedMonths.toFixed(1).replace(".", ",") +
+                            " de " +
+                            months +
+                            " meses protegidos"}
+                    </strong>
+                    {!hidden && protectedMonths !== null && (
+                      <progress
+                        max={months}
+                        value={Math.min(months, protectedMonths)}
+                        aria-label="Proteção da reserva"
+                      />
+                    )}
+                    {!hidden &&
+                      protectedMonths !== null &&
+                      protectedMonths >= months && (
+                        <p className="milestone">
+                          Reserva de emergência protegida.
+                        </p>
+                      )}
+                  </div>
+                  <details>
+                    <summary>Composição da reserva</summary>
+                    <dl className="finance-details">
+                      <div>
+                        <dt>
+                          Custo essencial mensal{" "}
+                          {reserveGoal?.essential_monthly_cents == null
+                            ? "(sugerido)"
+                            : "(manual)"}
+                        </dt>
+                        <dd>{money(cost)}</dd>
+                      </div>
+                      <div>
+                        <dt>Meses de proteção desejados</dt>
+                        <dd>{months}</dd>
+                      </div>
+                      <div>
+                        <dt>Reserva recomendada</dt>
+                        <dd>{money(cost * months)}</dd>
+                      </div>
+                      <div>
+                        <dt>Reserva atual</dt>
+                        <dd>{money(actual)}</dd>
+                      </div>
+                      <div>
+                        <dt>Quanto falta</dt>
+                        <dd>{money(Math.max(0, cost * months - actual))}</dd>
+                      </div>
+                    </dl>
+                  </details>
                   <small>
                     A reserva atual usa somente as contas selecionadas. Por
                     padrão, poupanças. Transferências ou retiradas nessas contas

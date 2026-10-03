@@ -4,11 +4,14 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { useFinance } from "./hooks/useFinance";
 import { usePlanning } from "./features/planning/usePlanning";
-import { HomeClarity } from "./features/planning/HomeClarity";
+import { Dashboard } from "./features/experience/Dashboard";
+import { Goals } from "./features/experience/Goals";
+import { Reports } from "./features/experience/Reports";
+import { Movements } from "./features/experience/Movements";
+import { BottomNavigation } from "./features/experience/BottomNavigation";
 import { PlanningWorkspace } from "./features/planning/PlanningWorkspace";
 import type { PlanningAction } from "./features/planning/PlanningWorkspace";
-import { QuickActions, Status, Field } from "./features/planning/ui";
-import { realized } from "./features/planning/calculations";
+import { QuickActions, Field } from "./features/planning/ui";
 import { FinancialActions } from "./features/planning/FinancialActions";
 import type { FinancialAction } from "./features/planning/FinancialActions";
 import type { Commitment } from "./features/planning/types";
@@ -17,12 +20,6 @@ import { invoices } from "./features/cards/calculations";
 import { rpc } from "./features/planning/queries";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
 import {
-  balance,
-  isRealized,
-  balanceSummary,
-  isReserveAccount,
-  displayDate,
-  goalProgress,
   inputMoney,
   money as formatMoney,
   parseMoney,
@@ -94,6 +91,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [recovery, setRecovery] = useState(false);
   const [page, setPage] = useState("home");
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [page]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [financialAction, setFinancialAction] =
     useState<FinancialAction | null>(null);
@@ -113,10 +114,7 @@ export default function App() {
   async function refresh() {
     await Promise.all([finance.refresh(), planning.refresh()]);
   }
-  const [month, setMonth] = useState(today().slice(0, 7));
-  const [historyMonth, setHistoryMonth] = useState(today().slice(0, 7));
-  const [filterAccount, setFilterAccount] = useState("");
-  const [filterType, setFilterType] = useState("");
+  const [planningSection, setPlanningSection] = useState("month");
   useEffect(() => {
     if (!supabase) {
       setAuthLoading(false);
@@ -169,70 +167,6 @@ export default function App() {
         onRecovered={() => setRecovery(false)}
       />
     );
-  const actual = realized(
-    data.transactions,
-    planning.data.card_purchases,
-    month,
-    today(),
-  );
-  const totals = {
-    ...actual,
-    result: actual.income - actual.expense,
-    saved:
-      actual.income > 0
-        ? ((actual.income - actual.expense) * 100) / actual.income
-        : null,
-  };
-  const balances = balanceSummary(data.accounts, data.transactions);
-  const reserveAccounts = data.accounts.filter(isReserveAccount);
-  const sorted = [...data.transactions].sort(
-    (a, b) =>
-      b.transaction_date.localeCompare(a.transaction_date) ||
-      b.created_at.localeCompare(a.created_at),
-  );
-  const accountName = (id: string | null) =>
-    data.accounts.find((a) => a.id === id)?.name ?? "Conta";
-  const categoryName = (id: string | null) =>
-    data.categories.find((c) => c.id === id)?.name ?? "";
-  const spending = data.categories
-    .filter((c) => c.type === "expense")
-    .map((c) => ({
-      name: c.name,
-      cents:
-        data.transactions
-          .filter(
-            (t) =>
-              t.type === "expense" &&
-              isRealized(t) &&
-              t.category_id === c.id &&
-              t.transaction_date.startsWith(month),
-          )
-          .reduce((sum, t) => sum + t.amount_cents, 0) +
-        planning.data.card_purchases
-          .filter(
-            (p) =>
-              p.category_id === c.id &&
-              p.purchase_date <= today() &&
-              p.purchase_date.startsWith(month),
-          )
-          .reduce((s, p) => s + p.amount_cents, 0),
-    }))
-    .filter((c) => c.cents > 0)
-    .sort((a, b) => b.cents - a.cents);
-  const [selectedYear, selectedMonth] = (month || today().slice(0, 7))
-    .split("-")
-    .map(Number);
-  const evolution = Array.from({ length: 6 }, (_, i) => {
-    const date = new Date(selectedYear, selectedMonth - 6 + i, 1);
-    const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const values = realized(
-      data.transactions,
-      planning.data.card_purchases,
-      period,
-      today(),
-    );
-    return { period, ...values, result: values.income - values.expense };
-  }).filter((m) => m.income || m.expense);
   async function remove(table: Table, id: string) {
     if (
       operation ||
@@ -315,130 +249,47 @@ export default function App() {
         due: c.due,
       });
   }
-  function rows(transactions: Transaction[]) {
-    return transactions.map((t) => (
-      <div className="movement" key={t.id}>
-        <span className={`movement-icon ${t.type}`}>
-          {t.type === "income" ? "↙" : t.type === "expense" ? "↗" : "⇄"}
-        </span>
-        <div className="grow">
-          <strong>
-            {t.description || categoryName(t.category_id) || "Transferência"}
-          </strong>
-          <small>
-            {displayDate(t.transaction_date)} · {accountName(t.account_id)}
-            {t.type === "transfer"
-              ? ` → ${accountName(t.destination_account_id)}`
-              : ` · ${categoryName(t.category_id)}`}
-            {t.is_recurring ? " · Recorrente" : ""} ·{" "}
-            <Status
-              state={
-                t.status === "pending"
-                  ? t.transaction_date > today()
-                    ? "forecast"
-                    : "pending"
-                  : "realized"
-              }
-            />
-          </small>
-        </div>
-        <div className="row-end">
-          <strong className={t.type}>
-            {!valuesHidden &&
-              (t.type === "expense" ? "−" : t.type === "income" ? "+" : "")}
-            {money(t.amount_cents)}
-          </strong>
-          <small>
-            {t.type === "card_payment" ? "Pagamento de fatura" : labels[t.type]}
-          </small>
-          {!t.payment_reference && t.type !== "adjustment" && (
-            <div className="actions">
-              <button
-                onClick={() => setEditor({ kind: "transaction", row: t })}
-              >
-                Editar
-              </button>
-              <button
-                disabled={operation}
-                onClick={() => void remove("transactions", t.id)}
-              >
-                Excluir
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    ));
-  }
-  function goals(limit?: number) {
-    return data.goals
-      .filter(
-        (g) => !g.is_emergency_reserve && (page === "goals" || g.is_active),
-      )
-      .slice(0, limit)
-      .map((g) => {
-        const p = goalProgress(g, data.goal_contributions);
-        return (
-          <article className="goal panel" key={g.id}>
-            <div className="section-heading">
-              <h3>
-                {g.name}
-                {!g.is_active && " · Arquivado"}
-              </h3>
-              <span>{valuesHidden ? "••••" : `${Math.round(p.percent)}%`}</span>
-            </div>
-            {!valuesHidden && (
-              <progress max="100" value={Math.min(100, p.percent)} />
-            )}
-            <p>
-              <strong>{money(p.accumulated)}</strong>
-              <span className="muted"> de {money(g.target_amount_cents)}</span>
-            </p>
-            <small>
-              Faltam {money(p.remaining)}
-              {g.target_date && ` · Até ${displayDate(g.target_date)}`}
-            </small>
-            {page === "goals" && (
-              <>
-                <div className="actions">
-                  <button
-                    disabled={!g.is_active}
-                    onClick={() => setEditor({ kind: "contribution", goal: g })}
-                  >
-                    + Aporte
-                  </button>
-                  <button onClick={() => setEditor({ kind: "goal", row: g })}>
-                    Editar
-                  </button>
-                  <button
-                    disabled={operation}
-                    onClick={() => void archive("goals", g.id, g.is_active)}
-                  >
-                    {g.is_active ? "Arquivar" : "Reativar"}
-                  </button>
-                </div>
-                {data.goal_contributions
-                  .filter((c) => c.goal_id === g.id)
-                  .map((c) => (
-                    <div className="contribution" key={c.id}>
-                      <small>
-                        {displayDate(c.contribution_date)} ·{" "}
-                        {c.description || "Aporte"} · {money(c.amount_cents)}
-                      </small>
-                      <button
-                        disabled={operation}
-                        onClick={() => void remove("goal_contributions", c.id)}
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  ))}
-              </>
-            )}
-          </article>
-        );
+  function selectQuickAction(kind: string) {
+    setQuick(false);
+    if (["income", "expense", "transfer"].includes(kind))
+      setEditor({
+        kind: "transaction",
+        initialType: kind as "income" | "expense" | "transfer",
+        accountId: lastAccount.current,
+      });
+    else if (kind === "schedule") setFinancialAction({ kind: "schedule" });
+    else if (kind.startsWith("contribution:")) {
+      const goal = data.goals.find((g) => g.id === kind.slice(13));
+      if (goal) setEditor({ kind: "contribution", goal });
+    } else if (kind.startsWith("cardPayment:")) {
+      const [cardId, invoiceMonth] = kind.slice(12).split(":");
+      const card = planning.data.credit_cards.find((c) => c.id === cardId);
+      const invoice = invoices(
+        planning.data.credit_cards,
+        planning.data.card_purchases,
+        planning.data.card_invoices,
+        planning.data.card_payments,
+      ).find((i) => i.card_id === cardId && i.month === invoiceMonth);
+      if (card && invoice)
+        setPlanningAction({ kind: "cardPayment", card, invoice });
+    } else
+      setPlanningAction({
+        kind: kind as "purchase" | "debtPayment" | "installment",
       });
   }
+  const goalsContent = (
+    <Goals
+      data={data}
+      money={money}
+      hidden={valuesHidden}
+      busy={operation}
+      onCreate={() => setEditor({ kind: "goal" })}
+      onEdit={(row) => setEditor({ kind: "goal", row })}
+      onContribution={(goal) => setEditor({ kind: "contribution", goal })}
+      onArchive={(g) => void archive("goals", g.id, g.is_active)}
+      onRemove={(id) => void remove("goal_contributions", id)}
+    />
+  );
   return (
     <div className="shell">
       <header>
@@ -498,228 +349,53 @@ export default function App() {
             </button>
           </div>
         )}
-        {!error && !loading && (
+        {!error && (!loading || (finance.ready && planning.ready)) && (
           <div className="page-content" key={page}>
             {page === "home" && (
-              <>
-                <div className="eyebrow">SEU DINHEIRO, COM DIREÇÃO</div>
-                <h1>Um passo de cada vez.</h1>
-                <HomeClarity
-                  data={data}
-                  plan={planning.data}
-                  money={money}
-                  onPlan={() => setPage("planning")}
-                  onNew={() => setQuick(true)}
-                  onResolve={resolveCommitment}
-                  onSetup={() => setSetup(true)}
-                />
-                <div className="section-heading">
-                  <h2>Onde está seu dinheiro</h2>
-                  <button onClick={() => setPage("settings")}>Gerenciar</button>
-                </div>
-                {!data.accounts.length ? (
-                  <Empty
-                    text="Crie sua primeira conta para começar a registrar."
-                    action="Criar conta"
-                    onClick={() => setEditor({ kind: "account" })}
-                  />
-                ) : (
-                  data.accounts.map((a) => (
-                    <div className="account-line" key={a.id}>
-                      <div>
-                        <strong>{a.name}</strong>
-                        <small>
-                          {accountTypes[a.type]}
-                          {!a.is_active && " · Arquivada"}
-                        </small>
-                      </div>
-                      <strong>{money(balance(a, data.transactions))}</strong>
-                    </div>
-                  ))
-                )}
-                {data.goals.some((g) => g.is_active) && (
-                  <>
-                    <div className="section-heading">
-                      <h2>Seus objetivos</h2>
-                      <button onClick={() => setPage("goals")}>
-                        Ver todos
-                      </button>
-                    </div>
-                    {goals(3)}
-                  </>
-                )}
-              </>
+              <Dashboard
+                data={data}
+                plan={planning.data}
+                money={money}
+                hidden={valuesHidden}
+                onPlan={(section) => {
+                  setPlanningSection(section ?? "month");
+                  setPage("planning");
+                }}
+                onAction={selectQuickAction}
+                onResolve={resolveCommitment}
+                onSetup={() => setSetup(true)}
+                onGoals={() => setPage("goals")}
+                onReports={() => setPage("reports")}
+                onAccount={() => setEditor({ kind: "account" })}
+              />
             )}
             {page === "history" && (
-              <>
-                <h1>Movimentações</h1>
-                <div className="section-heading">
-                  <h2>Seu mês · realizado</h2>
-                  <input
-                    aria-label="Mês do resumo"
-                    type="month"
-                    value={month}
-                    onChange={(e) =>
-                      setMonth(e.target.value || today().slice(0, 7))
-                    }
-                  />
-                </div>
-                <div className="metrics">
-                  <div>
-                    <small>Entrou</small>
-                    <strong className="income">{money(totals.income)}</strong>
-                  </div>
-                  <div>
-                    <small>Saiu</small>
-                    <strong>{money(totals.expense)}</strong>
-                  </div>
-                  <div>
-                    <small>Resultado</small>
-                    <strong>{money(totals.result)}</strong>
-                  </div>
-                </div>
-                {totals.saved !== null && (
-                  <p className="muted">
-                    {valuesHidden ? "••••" : `${totals.saved.toFixed(1)}%`} da
-                    receita economizada no mês.
-                  </p>
-                )}
-                {!!spending.length && (
-                  <details className="summary-detail">
-                    <summary>Onde gastei neste mês</summary>
-                    {spending.map((c) => (
-                      <div className="account-line" key={c.name}>
-                        <span>{c.name}</span>
-                        <strong>{money(c.cents)}</strong>
-                      </div>
-                    ))}
-                  </details>
-                )}
-                {evolution.length > 1 && (
-                  <details className="summary-detail">
-                    <summary>Minha evolução · últimos 6 meses</summary>
-                    <p className="muted">Resultado: receitas menos despesas.</p>
-                    {evolution.map((m) => (
-                      <div className="account-line" key={m.period}>
-                        <span>{m.period.split("-").reverse().join("/")}</span>
-                        <strong className={m.result < 0 ? "expense" : "income"}>
-                          {money(m.result)}
-                        </strong>
-                      </div>
-                    ))}
-                  </details>
-                )}
-
-                <div className="filters">
-                  <Field label="Mês">
-                    <input
-                      type="month"
-                      value={historyMonth}
-                      onChange={(e) => setHistoryMonth(e.target.value)}
-                    />
-                  </Field>
-                  <Field label="Conta">
-                    <select
-                      value={filterAccount}
-                      onChange={(e) => setFilterAccount(e.target.value)}
-                    >
-                      <option value="">Todas</option>
-                      {data.accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Tipo">
-                    <select
-                      value={filterType}
-                      onChange={(e) => setFilterType(e.target.value)}
-                    >
-                      <option value="">Todos</option>
-                      {Object.entries(labels).map(([k, v]) => (
-                        <option key={k} value={k}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-                <button className="primary" onClick={() => setQuick(true)}>
-                  + Adicionar
-                </button>
-                {(() => {
-                  const filtered = sorted.filter(
-                    (t) =>
-                      isRealized(t) &&
-                      (!historyMonth ||
-                        t.transaction_date.startsWith(historyMonth)) &&
-                      (!filterType || t.type === filterType) &&
-                      (!filterAccount ||
-                        t.account_id === filterAccount ||
-                        t.destination_account_id === filterAccount),
-                  );
-                  return filtered.length ? (
-                    rows(filtered)
-                  ) : (
-                    <p className="empty">Nenhuma movimentação neste filtro.</p>
-                  );
-                })()}
-              </>
+              <Movements
+                data={data}
+                money={money}
+                hidden={valuesHidden}
+                busy={operation}
+                onEdit={(row) => setEditor({ kind: "transaction", row })}
+                onDelete={(id) => void remove("transactions", id)}
+                onNew={() => setQuick(true)}
+                onPending={() => {
+                  setPlanningSection("scheduled");
+                  setPage("planning");
+                }}
+              />
             )}
-            {page === "investments" && (
-              <>
-                <h1>Investimentos e Reserva</h1>
-                <section className="balance">
-                  <span>Total em investimentos e reserva</span>
-                  <h2>{money(balances.reserve)}</h2>
-                  <small>Inclui contas arquivadas · lançamentos até hoje</small>
-                </section>
-                {reserveAccounts.length ? (
-                  reserveAccounts.map((a) => (
-                    <div className="account-line" key={a.id}>
-                      <div>
-                        <strong>{a.name}</strong>
-                        <small>
-                          {accountTypes[a.type]}
-                          {!a.is_active && " · Arquivada"}
-                        </small>
-                      </div>
-                      <strong>{money(balance(a, data.transactions))}</strong>
-                    </div>
-                  ))
-                ) : (
-                  <p className="empty">
-                    Nenhuma conta de poupança ou investimento. Crie uma conta em
-                    Ajustes.
-                  </p>
-                )}
-              </>
+            {page === "reports" && (
+              <Reports
+                data={data}
+                plan={planning.data}
+                money={money}
+                hidden={valuesHidden}
+              />
             )}
             {page === "goals" && (
               <>
-                <div className="section-heading">
-                  <h1>Objetivos</h1>
-                  <button
-                    className="primary"
-                    onClick={() => setEditor({ kind: "goal" })}
-                  >
-                    + Criar
-                  </button>
-                </div>
-                <p className="muted">
-                  Aportes acompanham sua meta; não movimentam o saldo das
-                  contas.
-                </p>
-                {data.goals.length ? (
-                  goals()
-                ) : (
-                  <Empty
-                    text="Dê um nome ao próximo passo: reserva, viagem ou outra conquista."
-                    action="Criar objetivo"
-                    onClick={() => setEditor({ kind: "goal" })}
-                  />
-                )}
+                <h1>Metas</h1>
+                {goalsContent}
               </>
             )}
             {page === "settings" && (
@@ -829,6 +505,9 @@ export default function App() {
             money={money}
             hidden={valuesHidden}
             visible={page === "planning"}
+            section={planningSection}
+            onSection={setPlanningSection}
+            goalsContent={goalsContent}
             action={planningAction}
             setAction={setPlanningAction}
             onResolve={resolveCommitment}
@@ -837,41 +516,23 @@ export default function App() {
             }
             onSaved={async () => {
               await refresh();
-              setNotice("Salvo com sucesso. Planejamento atualizado.");
+              setNotice(
+                planningAction?.kind === "debtPayment"
+                  ? "Pagamento registrado. Dívida reduzida."
+                  : planningAction?.kind === "cardPayment"
+                    ? "Pagamento registrado. Fatura atualizada."
+                    : "Salvo com sucesso. Planejamento atualizado.",
+              );
             }}
           />
         )}
       </main>
-      <nav aria-label="Navegação principal">
-        {[
-          ["home", "⌂", "Início"],
-          ["history", "↕", "Movimentações"],
-          ["add", "+", "Adicionar"],
-          ["planning", "◇", "Planejar"],
-          ["goals", "◎", "Objetivos"],
-          ["settings", "☷", "Ajustes"],
-        ].map(([id, icon, label]) => (
-          <button
-            key={id}
-            aria-label={label}
-            aria-current={page === id ? "page" : undefined}
-            disabled={id === "add" && (loading || !!error)}
-            className={`${page === id ? "selected" : ""} ${id === "add" ? "add" : ""}`}
-            onClick={() => (id === "add" ? setQuick(true) : setPage(id))}
-          >
-            <span aria-hidden="true">{icon}</span>
-            <small>
-              {id === "history"
-                ? "Movimentos"
-                : id === "add"
-                  ? "Novo"
-                  : id === "goals"
-                    ? "Metas"
-                    : label}
-            </small>
-          </button>
-        ))}
-      </nav>
+      <BottomNavigation
+        page={page}
+        onNavigate={setPage}
+        onNew={() => setQuick(true)}
+        disabled={loading || !!error}
+      />
       {editor && (
         <EditorForm
           key={`${editor.kind}:${"row" in editor ? (editor.row?.id ?? "new") : "new"}`}
@@ -942,24 +603,22 @@ export default function App() {
             (g) => g.is_active && !g.is_emergency_reserve,
           )}
           onClose={() => setQuick(false)}
-          onSelect={(kind) => {
-            setQuick(false);
-            if (["income", "expense", "transfer"].includes(kind))
-              setEditor({
-                kind: "transaction",
-                initialType: kind as "income" | "expense" | "transfer",
-                accountId: lastAccount.current,
-              });
-            else if (kind === "schedule")
-              setFinancialAction({ kind: "schedule" });
-            else if (kind.startsWith("contribution:")) {
-              const goal = data.goals.find((g) => g.id === kind.slice(13));
-              if (goal) setEditor({ kind: "contribution", goal });
-            } else
-              setPlanningAction({
-                kind: kind as "purchase" | "debtPayment" | "installment",
-              });
-          }}
+          invoices={invoices(
+            planning.data.credit_cards,
+            planning.data.card_purchases,
+            planning.data.card_invoices,
+            planning.data.card_payments,
+          )
+            .filter((i) => i.pending > 0)
+            .map((i) => ({
+              id: i.card_id + ":" + i.month,
+              name:
+                (planning.data.credit_cards.find((c) => c.id === i.card_id)
+                  ?.name ?? "Cartão") +
+                " · " +
+                i.month.split("-").reverse().join("/"),
+            }))}
+          onSelect={selectQuickAction}
         />
       )}
     </div>
@@ -969,24 +628,6 @@ function Brand() {
   return (
     <div className="brand">
       <span>↗</span> rota<span className="brand-light">financeira</span>
-    </div>
-  );
-}
-function Empty({
-  text,
-  action,
-  onClick,
-}: {
-  text: string;
-  action: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="empty">
-      <p>{text}</p>
-      <button className="primary" onClick={onClick}>
-        {action}
-      </button>
     </div>
   );
 }

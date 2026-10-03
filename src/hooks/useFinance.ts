@@ -11,15 +11,16 @@ const empty: FinanceData = {
 export function useFinance(userId: string | undefined) {
   const [snapshot, setSnapshot] = useState<{
     owner: string | undefined;
+    ready: boolean;
     data: FinanceData;
-  }>({ owner: undefined, data: empty });
+  }>({ owner: undefined, ready: false, data: empty });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
   const refresh = useCallback(async () => {
     const run = ++generation.current;
     if (!userId || !supabase) {
-      setSnapshot({ owner: userId, data: empty });
+      setSnapshot({ owner: userId, ready: false, data: empty });
       setLoading(false);
       setError("");
       return;
@@ -47,11 +48,12 @@ export function useFinance(userId: string | undefined) {
       if (run === generation.current)
         setSnapshot({
           owner: userId,
+          ready: true,
           data: Object.fromEntries(result) as unknown as FinanceData,
         });
     } catch {
       if (run === generation.current) {
-        setSnapshot({ owner: userId, data: empty });
+        setSnapshot({ owner: userId, ready: false, data: empty });
         setError(
           "Não foi possível carregar seus dados. Verifique a conexão e a configuração do banco.",
         );
@@ -64,7 +66,7 @@ export function useFinance(userId: string | undefined) {
     ++generation.current;
   }, []);
   useEffect(() => {
-    setSnapshot({ owner: userId, data: empty });
+    setSnapshot({ owner: userId, ready: false, data: empty });
     void refresh();
     return invalidate;
   }, [refresh, invalidate, userId]);
@@ -75,7 +77,9 @@ export function useFinance(userId: string | undefined) {
     };
     window.addEventListener("online", whenVisible);
     document.addEventListener("visibilitychange", whenVisible);
+    const timer = window.setInterval(whenVisible, 60000);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener("online", whenVisible);
       document.removeEventListener("visibilitychange", whenVisible);
     };
@@ -84,6 +88,7 @@ export function useFinance(userId: string | undefined) {
     data: snapshot.owner === userId ? snapshot.data : empty,
     loading: loading || snapshot.owner !== userId,
     error,
+    ready: snapshot.owner === userId && snapshot.ready,
     refresh,
   };
 }

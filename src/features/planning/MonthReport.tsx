@@ -132,11 +132,14 @@ export function MonthReport({
             />
           ))}
       </details>
-      <p className="muted">
-        Os subtotais medem o efeito no disponível. Itens em reserva e
-        transferências internas aparecem na composição com seu valor, sem
-        consumir dinheiro livre.
-      </p>
+      <details className="calculation-note">
+        <summary>Como calculamos os compromissos?</summary>
+        <p className="muted">
+          Os subtotais medem o efeito no disponível. Itens em reserva e
+          transferências internas aparecem na composição com seu valor, sem
+          consumir dinheiro livre.
+        </p>
+      </details>
     </section>
   );
 }

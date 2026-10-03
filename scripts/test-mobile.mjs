@@ -267,7 +267,12 @@ try {
       .waitFor({ state: "hidden" });
   };
   const quick = async (name) => {
-    await nav("Adicionar").click();
+    await nav("Novo").click();
+    if (name === "Pagamento de dívida")
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Pagamento", exact: true })
+        .click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name, exact: true })
@@ -305,7 +310,7 @@ try {
     }
   }
   await page
-    .getByText("Livre depois dos compromissos · mês atual", { exact: true })
+    .getByText("Livre no mês", { exact: true })
     .waitFor({ timeout: 30000 });
   await nav("Planejar").click();
   await tab("Cartões").click();
@@ -348,7 +353,7 @@ try {
     ),
     2000,
   );
-  await tab("Dívidas / Parcelas").click();
+  await tab("Dívidas e parcelas").click();
   await button("Adicionar dívida").first().click();
   await field("Nome").fill("Dívida local");
   await field("Dívida original (R$)").fill("300");
@@ -401,7 +406,7 @@ try {
       .length,
     1,
   );
-  await tab("Investimentos/Reserva").click();
+  await tab("Reserva e investimentos").click();
   await button("Ajustar reserva").click();
   await field(
     "Custo essencial mensal (R$) · deixe vazio para usar sugestão",
@@ -455,7 +460,7 @@ try {
       )[0].amount,
     );
   const beforePending = await actualCash();
-  await quick("Agendar receita/despesa");
+  await quick("Programar");
   await field("Descrição").fill("Tarifa programada");
   await field("Valor (R$)").fill("10");
   await field("Conta").selectOption(cash);
@@ -473,7 +478,7 @@ try {
     "pending",
   );
   await nav("Planejar").click();
-  await tab("Visão do mês").click();
+  await tab("Programadas").click();
   const scheduled = () =>
     page
       .getByRole("tabpanel")
@@ -489,7 +494,7 @@ try {
     .click();
   await save();
   assert.equal(await actualCash(), beforePending - 1200);
-  await quick("Agendar receita/despesa");
+  await quick("Programar");
   await field("Descrição").fill("Cancelar programada");
   await field("Valor (R$)").fill("10");
   await field("Conta").selectOption(cash);
@@ -512,7 +517,7 @@ try {
   await field("Saldo restante conhecido (R$) · opcional").fill("650");
   await field("Próximo vencimento").fill(today.slice(0, 7) + "-31");
   await save();
-  await tab("Dívidas / Parcelas").click();
+  await tab("Dívidas e parcelas").click();
   await page.getByText(/Parcela 8\/14/).waitFor();
   await nav("Ajustes").click();
   await page
@@ -537,40 +542,36 @@ try {
   await button("Configuração rápida").click();
   for (let i = 0; i < 6; i++) await button("Continuar / pular etapa").click();
   await button("Ver minha Home").click();
-  await page
-    .getByText("Livre depois dos compromissos · mês atual", { exact: true })
-    .waitFor();
+  await page.getByText("Livre no mês", { exact: true }).waitFor();
   results.push(
     "programada vencida não altera caixa; editar; confirmar uma vez; cancelar; parcela 8/14; ajuste negativo rastreável; configuração rápida",
   );
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Início").click();
-    await page
-      .getByText("Livre depois dos compromissos · mês atual", { exact: true })
-      .waitFor();
+    await page.getByText("Livre no mês", { exact: true }).waitFor();
     await fit(`${width}px Home`);
     await capture(`${width}-home`);
     await nav("Planejar").click();
     for (const name of [
       "Visão do mês",
-      "Próximos meses",
+      "Programadas",
       "Cartões",
-      "Dívidas / Parcelas",
+      "Dívidas e parcelas",
       "Recorrentes",
-      "Investimentos/Reserva",
+      "Reserva e investimentos",
     ]) {
       await tab(name).click();
       await fit(`${width}px ${name}`);
       await capture(
-        `${width}-${["Próximos meses", "Cartões", "Dívidas / Parcelas", "Recorrentes", "Investimentos/Reserva"].indexOf(name)}`,
+        `${width}-${["Programadas", "Cartões", "Dívidas e parcelas", "Recorrentes", "Reserva e investimentos"].indexOf(name)}`,
       );
     }
     await tab("Cartões").click();
     await button("Compra no cartão").click();
     await fit(`${width}px compra parcelada modal`);
     await button("Fechar").click();
-    await tab("Dívidas / Parcelas").click();
+    await tab("Dívidas e parcelas").click();
     await button("Registrar pagamento").first().click();
     await fit(`${width}px pagamento dívida modal`);
     await button("Fechar").click();

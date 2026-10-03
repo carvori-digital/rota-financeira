@@ -5,15 +5,16 @@ import { loadPlanning } from "./queries";
 export function usePlanning(user: string | undefined) {
   const [snapshot, setSnapshot] = useState<{
     owner: string | undefined;
+    ready: boolean;
     data: PlanningData;
-  }>({ owner: undefined, data: emptyPlanning });
+  }>({ owner: undefined, ready: false, data: emptyPlanning });
   const [loading, setLoading] = useState(false),
     [error, setError] = useState("");
   const generation = useRef(0);
   const refresh = useCallback(async () => {
     const run = ++generation.current;
     if (!user) {
-      setSnapshot({ owner: user, data: emptyPlanning });
+      setSnapshot({ owner: user, ready: false, data: emptyPlanning });
       setLoading(false);
       setError("");
       return;
@@ -22,10 +23,11 @@ export function usePlanning(user: string | undefined) {
     setError("");
     try {
       const data = await loadPlanning(user);
-      if (run === generation.current) setSnapshot({ owner: user, data });
+      if (run === generation.current)
+        setSnapshot({ owner: user, ready: true, data });
     } catch {
       if (run === generation.current) {
-        setSnapshot({ owner: user, data: emptyPlanning });
+        setSnapshot({ owner: user, ready: false, data: emptyPlanning });
         setError(
           "Não foi possível carregar o planejamento. Confira a conexão e a migration V0.2.",
         );
@@ -47,7 +49,9 @@ export function usePlanning(user: string | undefined) {
     };
     window.addEventListener("online", visible);
     document.addEventListener("visibilitychange", visible);
+    const timer = window.setInterval(visible, 60000);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener("online", visible);
       document.removeEventListener("visibilitychange", visible);
     };
@@ -56,6 +60,7 @@ export function usePlanning(user: string | undefined) {
     data: snapshot.owner === user ? snapshot.data : emptyPlanning,
     loading: loading || snapshot.owner !== user,
     error,
+    ready: snapshot.owner === user && snapshot.ready,
     refresh,
   };
 }

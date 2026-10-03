@@ -19,6 +19,105 @@ import App from "../src/App";
 import { act } from "react";
 import { today } from "../src/utils/finance";
 
+// New organization checks keep every existing financial assertion below.
+describe("experiência: relatórios, extrato e atualização", () => {
+  it("relatórios usam o mesmo fechamento da Home e não escrevem dados", async () => {
+    const user = await open();
+    const closing = document.querySelector(".month-hero h2")?.textContent;
+    const before = JSON.stringify(backend.rows);
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Relatórios",
+        exact: true,
+      }),
+    );
+    for (const name of [
+      "Fluxo do mês",
+      "Gastos por categoria",
+      "Evolução mensal",
+      "Compromissos",
+      "Projeção",
+      "Dívidas",
+      "Taxa de economia",
+    ])
+      expect(screen.getByRole("heading", { name, exact: true })).toBeTruthy();
+    const chart = screen.getByRole("group", {
+      name: "Saldo projetado nos próximos quatro meses",
+    });
+    expect(chart.querySelector(".chart-label strong")?.textContent).toBe(
+      closing,
+    );
+    expect(JSON.stringify(backend.rows)).toBe(before);
+    expect(backend.writes).toHaveLength(0);
+  });
+  it("busca compacta filtra o extrato e mantém filtros durante atualização", async () => {
+    backend.rows.transactions.push({
+      id: "search-fixture",
+      user_id: "user-a",
+      account_id: "a",
+      destination_account_id: null,
+      category_id: "c",
+      type: "expense",
+      amount_cents: 1000,
+      description: "Mercado",
+      transaction_date: today(),
+      status: "realized",
+      is_recurring: false,
+      created_at: "",
+    });
+    const user = await open();
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Movimentos",
+        exact: true,
+      }),
+    );
+    expect(screen.queryByLabelText("Mês", { exact: true })).toBeNull();
+    await user.type(screen.getByRole("searchbox"), "Mercado");
+    expect(document.querySelectorAll(".movement")).toHaveLength(1);
+    await user.click(
+      screen.getByRole("button", { name: "Filtros", exact: true }),
+    );
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await waitFor(() =>
+      expect(screen.queryByText("Atualizando dados…")).toBeNull(),
+    );
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe(
+      "Mercado",
+    );
+    expect(screen.getByLabelText("Mês", { exact: true })).toBeTruthy();
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "inexistente");
+    expect(document.querySelectorAll(".movement")).toHaveLength(0);
+  });
+  it("registros adicionados enquanto a tela está aberta aparecem após atualização", async () => {
+    await open();
+    backend.rows.transactions.push({
+      id: "late-record",
+      user_id: "user-a",
+      account_id: "a",
+      destination_account_id: null,
+      category_id: null,
+      type: "income",
+      amount_cents: 7500,
+      description: "Receita nova",
+      transaction_date: today(),
+      status: "realized",
+      is_recurring: false,
+      created_at: "",
+    });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await waitFor(() =>
+      expect(
+        screen.getByText("Saldo agora").parentElement?.querySelector("strong")
+          ?.textContent,
+      ).toMatch(/175,00/),
+    );
+    expect(backend.rows.transactions).toHaveLength(1);
+    expect(backend.writes).toHaveLength(0);
+  });
+});
+
 type Row = Record<string, unknown>;
 declare const jsdom: { window: { localStorage: Storage } };
 const backend = vi.hoisted(() => ({
@@ -218,7 +317,7 @@ beforeEach(() => {
 afterEach(cleanup);
 async function open() {
   render(<App />);
-  await screen.findByText("Saldo disponível");
+  await screen.findByText("Saldo agora");
   return userEvent.setup();
 }
 describe("fluxos reais da interface com Supabase isolado de teste", () => {
@@ -256,7 +355,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Salvar senha", exact: true }),
     );
-    await screen.findByText("Saldo disponível");
+    await screen.findByText("Saldo agora");
     expect(backend.authCalls[2]).toMatchObject({
       kind: "password",
       payload: { password: "new-fixture-password" },
@@ -265,22 +364,23 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
   it("limpar período do histórico não transforma dashboard em total de todos os meses", async () => {
     const user = await open();
     await user.click(
-      screen.getByRole("button", { name: "Movimentações", exact: true }),
+      screen.getByRole("button", { name: "Movimentos", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Filtros", exact: true }),
     );
     await user.clear(screen.getByLabelText("Mês"));
     await user.click(
       screen.getByRole("button", { name: "Início", exact: true }),
     );
-    expect(
-      screen.getByText("Livre depois dos compromissos · mês atual").textContent,
-    ).toContain("mês atual");
+    expect(screen.getByText("Livre no mês").textContent).toContain(
+      "Livre no mês",
+    );
   });
   it("repetir após resposta perdida não duplica lançamento já gravado", async () => {
     const user = await open();
     backend.lostResponse = true;
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Despesa",
@@ -319,7 +419,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     ];
     const user = await open();
     await user.click(
-      screen.getByRole("button", { name: "Movimentações", exact: true }),
+      screen.getByRole("button", { name: "Movimentos", exact: true }),
     );
     await user.click(
       screen.getByRole("button", { name: "Editar", exact: true }),
@@ -342,9 +442,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
   });
   it("reconstitui sessão e permite cadastrar despesa em centavos", async () => {
     const user = await open();
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Despesa",
@@ -369,9 +467,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
   });
   it("transferência grava uma linha e mantém o total", async () => {
     const user = await open();
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       screen.getByRole("button", { name: "Transferência", exact: true }),
     );
@@ -393,9 +489,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
   it("erro de gravação preserva formulário e UUID ao repetir", async () => {
     const user = await open();
     backend.writeError = true;
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Despesa",
@@ -422,10 +516,10 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     backend.readError = true;
     render(<App />);
     await screen.findByRole("alert");
-    expect(screen.queryByText("Saldo disponível")).toBeNull();
+    expect(screen.queryByText("Saldo agora")).toBeNull();
     expect(
       screen
-        .getByRole("button", { name: "Adicionar", exact: true })
+        .getByRole("button", { name: "Novo", exact: true })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -444,7 +538,13 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
   it("cria objetivo e registra aporte separado do saldo", async () => {
     const user = await open();
     await user.click(
-      screen.getByRole("button", { name: "Objetivos", exact: true }),
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Início",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Metas", exact: true }),
     );
     await user.click(
       screen.getByRole("button", { name: "+ Criar", exact: true }),
@@ -483,7 +583,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Entrar", exact: true }),
     );
-    await screen.findByText("Saldo disponível");
+    await screen.findByText("Saldo agora");
   });
 });
 
@@ -542,15 +642,14 @@ describe("disponível, reserva e privacidade", () => {
     fixtures();
     const user = await open();
     expect(
-      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
+        ?.textContent,
     ).toMatch(/110,00/);
     expect(
       screen.getByText("Patrimônio total nas contas").parentElement
         ?.textContent,
     ).toMatch(/610,00/);
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       screen.getByRole("button", { name: "Transferência", exact: true }),
     );
@@ -561,7 +660,8 @@ describe("disponível, reserva e privacidade", () => {
     );
     await screen.findByText(/Salvo com sucesso/);
     expect(
-      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
+        ?.textContent,
     ).toMatch(/85,00/);
     expect(
       screen.getByText("Investimentos e reserva").parentElement?.textContent,
@@ -577,7 +677,7 @@ describe("disponível, reserva e privacidade", () => {
       }),
     );
     await user.click(
-      screen.getByRole("tab", { name: "Investimentos/Reserva" }),
+      screen.getByRole("tab", { name: "Reserva e investimentos" }),
     );
     expect(
       screen.getByRole("heading", { name: "Investimentos e Reserva" }),
@@ -601,7 +701,7 @@ describe("disponível, reserva e privacidade", () => {
     );
     expect(document.body.textContent).not.toMatch(/R\$/);
     expect(document.querySelector("progress")).toBeNull();
-    for (const page of ["Planejar", "Movimentações", "Objetivos", "Ajustes"]) {
+    for (const page of ["Planejar", "Movimentos", "Relatórios", "Ajustes"]) {
       await user.click(
         within(screen.getByRole("navigation")).getByRole("button", {
           name: page,
@@ -621,7 +721,7 @@ describe("disponível, reserva e privacidade", () => {
     await screen.findByText(/Salvo com sucesso/);
     expect(backend.rows.accounts[0].initial_balance_cents).toBe(10000);
     await user.click(
-      screen.getByRole("button", { name: "Movimentações", exact: true }),
+      screen.getByRole("button", { name: "Movimentos", exact: true }),
     );
     await user.click(
       screen.getByRole("button", { name: "Editar", exact: true }),
@@ -633,7 +733,13 @@ describe("disponível, reserva e privacidade", () => {
       screen.getByRole("button", { name: "Fechar", exact: true }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Objetivos", exact: true }),
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Início",
+        exact: true,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Metas", exact: true }),
     );
     await user.click(
       screen.getByRole("button", { name: "Editar", exact: true }),
@@ -656,7 +762,7 @@ describe("disponível, reserva e privacidade", () => {
     );
     cleanup();
     render(<App />);
-    await screen.findByText("Saldo disponível");
+    await screen.findByText("Saldo agora");
     expect(screen.getByRole("button", { name: "Exibir valores" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/R\$/);
     await user.click(screen.getByRole("button", { name: "Exibir valores" }));
@@ -689,9 +795,7 @@ describe("disponível, reserva e privacidade", () => {
 describe("navegação mobile e movimento reduzido", () => {
   it("fecha o editor com animação e aguarda desmontagem antes de abrir outro modal", async () => {
     const user = await open();
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Despesa",
@@ -703,9 +807,7 @@ describe("navegação mobile e movimento reduzido", () => {
     );
     expect(screen.getByRole("dialog").className).toBe("is-closing");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
   it("mantém os seis destinos e nomes acessíveis com rótulos curtos", async () => {
@@ -713,14 +815,13 @@ describe("navegação mobile e movimento reduzido", () => {
     const nav = screen.getByRole("navigation", { name: "Navegação principal" });
     expect(nav.querySelectorAll("button")).toHaveLength(6);
     expect(
-      screen.getByRole("button", { name: "Movimentações", exact: true })
+      screen.getByRole("button", { name: "Movimentos", exact: true })
         .textContent,
     ).toContain("Movimentos");
     expect(
-      screen.getByRole("button", { name: "Adicionar", exact: true })
-        .textContent,
+      screen.getByRole("button", { name: "Novo", exact: true }).textContent,
     ).toContain("Novo");
-    for (const name of ["Início", "Planejar", "Objetivos", "Ajustes"])
+    for (const name of ["Início", "Planejar", "Relatórios", "Ajustes"])
       expect(
         within(screen.getByRole("navigation")).getByRole("button", {
           name,
@@ -734,7 +835,7 @@ describe("navegação mobile e movimento reduzido", () => {
     try {
       const user = await open();
       await user.click(
-        screen.getByRole("button", { name: "Adicionar", exact: true }),
+        screen.getByRole("button", { name: "Novo", exact: true }),
       );
       expect(screen.getByRole("dialog")).toBeTruthy();
       await user.click(
@@ -758,9 +859,7 @@ describe("navegação mobile e movimento reduzido", () => {
 describe("integração V0.2", () => {
   it("Novo escolhe receita e lembra a conta usada para o próximo registro", async () => {
     const user = await open();
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     expect(
       within(screen.getByRole("dialog")).getAllByRole("button"),
     ).toHaveLength(9);
@@ -778,9 +877,7 @@ describe("integração V0.2", () => {
     );
     await screen.findByText(/Salvo com sucesso/);
     expect(backend.rows.transactions[0].type).toBe("income");
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Despesa",
@@ -794,9 +891,7 @@ describe("integração V0.2", () => {
   });
   it("compra sem cartão oferece cadastro direto e pode fechar sem gravar", async () => {
     const user = await open();
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Compra no cartão",
@@ -833,20 +928,18 @@ describe("integração V0.2", () => {
       }),
     );
     for (const name of [
-      "Próximos meses",
+      "Programadas",
       "Cartões",
-      "Dívidas / Parcelas",
+      "Dívidas e parcelas",
       "Recorrentes",
-      "Investimentos/Reserva",
+      "Reserva e investimentos",
     ]) {
       await user.click(screen.getByRole("tab", { name, exact: true }));
       expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
         screen.getByRole("tab", { name, exact: true }).id,
       );
     }
-    await user.click(
-      screen.getByRole("button", { name: "Adicionar", exact: true }),
-    );
+    await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Aporte/transferência",
@@ -883,13 +976,17 @@ describe("clareza financeira integrada", () => {
     ];
     const user = await open();
     expect(
-      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
+        ?.textContent,
     ).toMatch(/100,00/);
     await user.click(
       within(screen.getByRole("navigation")).getByRole("button", {
         name: "Planejar",
         exact: true,
       }),
+    );
+    await user.click(
+      screen.getByRole("tab", { name: "Programadas", exact: true }),
     );
     await user.click(
       screen.getByRole("button", { name: "Confirmar / cancelar", exact: true }),
@@ -917,7 +1014,8 @@ describe("clareza financeira integrada", () => {
       }),
     );
     expect(
-      screen.getByText("Saldo disponível").querySelector("strong")?.textContent,
+      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
+        ?.textContent,
     ).toMatch(/90,00/);
     expect(
       backend.writes.filter((w) => w.rpc === "resolve_transaction"),

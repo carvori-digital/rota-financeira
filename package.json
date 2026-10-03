@@ -14,13 +14,17 @@
     "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts",
     "format": "prettier --write .",
-    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts",
     "test:live": "node --experimental-strip-types scripts/test-live.mjs",
     "test:mobile": "node scripts/test-mobile.mjs",
-    "validate:remote-data": "node scripts/remote-baseline.mjs"
+    "validate:remote-data": "node scripts/remote-baseline.mjs",
+    "validate:experience-data": "node scripts/experience-data-audit.mjs",
+    "preview:experience": "node scripts/experience-preview.mjs",
+    "test:experience": "node scripts/test-experience.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
+    "lucide-react": "^1.50.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
