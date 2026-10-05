@@ -67,3 +67,18 @@ mobile e 47 de experiência em 375/390/430 px. Typecheck, lint e build aprovados
 o build mantém aviso de bundle superior a 500 kB. O ensaio local da cópia
 histórica de 50 registros preservou IDs, campos e invariantes financeiros.
 Isso não substitui o snapshot fresco imediatamente anterior à aplicação.
+
+## Aplicação remota validada
+
+Snapshot fresco READ ONLY encontrou 54 registros, incluindo quatro transações
+posteriores à auditoria inicial da retomada. O ensaio dessa captura e o dry-run
+confirmaram somente 005–006. Ambas foram aplicadas incrementalmente, sem seeds,
+reset ou restauração. A captura pós-migration confirmou os 54 registros de
+origem e seus campos, exceto o arquivamento/vínculo documentado da conta migrada.
+Os 60 registros finais incluem um investimento, dois movimentos importados e
+três revisões LOW. Nenhuma revisão alterou compras, dívidas ou valores.
+
+Comparação aprovada: saldo operacional, investimentos/reserva, patrimônio bruto
+e líquido, dívidas, faturas, saldos por conta e vínculos de origem. RLS nas 19
+tabelas. Snapshots completos, hashes SHA-256, logs e relatório de comparação
+permanecem exclusivamente no diretório privado ignorado `test-results/`.
