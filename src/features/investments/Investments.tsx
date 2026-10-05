@@ -7,6 +7,7 @@ import type { Money } from "../planning/ui";
 import { rpc, save } from "../planning/queries";
 import { today, displayDate } from "../../utils/finance";
 import { investmentValue } from "./calculations";
+import { DeleteRecord } from "../planning/DeleteRecord";
 type Action = {
   kind: "edit" | "contribution" | "withdrawal" | "adjustment";
   investment?: Investment;
@@ -143,6 +144,17 @@ export function Investments({
                   </div>
                 ))}
             </details>
+            <DeleteRecord
+              kind="investment"
+              id={i.id}
+              onSaved={onSaved}
+              blocked={
+                i.source_account_id
+                  ? "Este investimento foi migrado de uma conta com histórico financeiro e não pode ser excluído diretamente."
+                  : undefined
+              }
+              explanation="Os movimentos deste investimento serão removidos. Aportes e resgates vinculados serão desfeitos nas contas de origem e destino."
+            />
           </article>
         );
       })}

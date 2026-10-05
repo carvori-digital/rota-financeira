@@ -1,6 +1,7 @@
 import type { PlanningData } from "../planning/types";
 import type { Money } from "../planning/ui";
 import { Status } from "../planning/ui";
+import { DeleteRecord } from "../planning/DeleteRecord";
 import type { CreditCard, InvoiceSummary, CardPurchase } from "./types";
 import { addMonths } from "../planning/dates";
 import { invoices, purchaseInstallments } from "./calculations";
@@ -14,7 +15,7 @@ export function CardsPanel({
   onPay,
   onToggle,
   onEditPurchase,
-  onCancelPurchase,
+  onSaved,
   onAdjustPurchase,
 }: {
   plan: PlanningData;
@@ -25,7 +26,7 @@ export function CardsPanel({
   onPay: (c: CreditCard, i: InvoiceSummary) => void;
   onToggle: (c: CreditCard) => void;
   onEditPurchase: (p: CardPurchase) => void;
-  onCancelPurchase: (p: CardPurchase) => void;
+  onSaved: () => Promise<void>;
   onAdjustPurchase: (p: CardPurchase) => void;
 }) {
   const bills = invoices(
@@ -119,6 +120,12 @@ export function CardsPanel({
               {c.active ? "Arquivar" : "Reativar"}
             </button>
           </div>
+          <DeleteRecord
+            kind="card"
+            id={c.id}
+            onSaved={onSaved}
+            explanation="Somente cartões sem compras, faturas ou pagamentos podem ser excluídos."
+          />
           {bills
             .filter((i) => i.card_id === c.id)
             .map((i) => (
@@ -173,12 +180,6 @@ export function CardsPanel({
                         >
                           Editar compra
                         </button>
-                        <button
-                          disabled={hasPayment(p)}
-                          onClick={() => onCancelPurchase(p)}
-                        >
-                          Cancelar compra
-                        </button>
                         <button onClick={() => onAdjustPurchase(p)}>
                           Ajuste de fatura
                         </button>
@@ -191,6 +192,16 @@ export function CardsPanel({
                       )}
                     </>
                   )}
+                  <DeleteRecord
+                    kind="purchase"
+                    id={p.id}
+                    onSaved={onSaved}
+                    blocked={
+                      hasPayment(p)
+                        ? "Esta compra está ligada a uma fatura com pagamento. Use um ajuste de fatura para corrigir."
+                        : undefined
+                    }
+                  />
                   <small>
                     {displayDate(p.purchase_date)} · {p.installments} parcela(s)
                     · término{" "}

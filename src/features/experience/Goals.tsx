@@ -2,6 +2,7 @@ import { Check, Target } from "lucide-react";
 import type { FinanceData, Goal } from "../../types";
 import { goalProgress, displayDate } from "../../utils/finance";
 import type { Money } from "../planning/ui";
+import { DeleteRecord } from "../planning/DeleteRecord";
 export function Goals({
   data,
   money,
@@ -12,6 +13,7 @@ export function Goals({
   onContribution,
   onArchive,
   onRemove,
+  onSaved,
 }: {
   data: FinanceData;
   money: Money;
@@ -22,6 +24,7 @@ export function Goals({
   onContribution: (g: Goal) => void;
   onArchive: (g: Goal) => void;
   onRemove: (id: string) => void;
+  onSaved: () => Promise<void>;
 }) {
   const goals = data.goals.filter((g) => !g.is_emergency_reserve);
   return (
@@ -99,6 +102,12 @@ export function Goals({
                 Aportes em metas registram progresso; não movimentam contas.
               </p>
             </details>
+            <DeleteRecord
+              kind="goal"
+              id={g.id}
+              onSaved={onSaved}
+              explanation="O histórico de aportes desta meta será removido. Contas, transações e investimentos serão preservados."
+            />
           </article>
         );
       })}
