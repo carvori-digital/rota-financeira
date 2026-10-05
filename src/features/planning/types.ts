@@ -1,4 +1,10 @@
 import type { Base } from "../../types/index.ts";
+import type {
+  Investment,
+  InvestmentMovement,
+  ClassificationReview,
+} from "../investments/types.ts";
+import type { CardAdjustment } from "../cards/types.ts";
 import type { RecurringItem, RecurringOccurrence } from "../recurring/types.ts";
 import type {
   CreditCard,
@@ -12,6 +18,10 @@ export interface ReserveLink extends Base {
   account_id: string;
 }
 export interface PlanningData {
+  investments?: Investment[];
+  investment_movements?: InvestmentMovement[];
+  classification_reviews?: ClassificationReview[];
+  card_adjustments?: CardAdjustment[];
   recurring_items: RecurringItem[];
   recurring_occurrences: RecurringOccurrence[];
   credit_cards: CreditCard[];
@@ -23,6 +33,10 @@ export interface PlanningData {
   reserve_account_links: ReserveLink[];
 }
 export const emptyPlanning: PlanningData = {
+  investments: [],
+  investment_movements: [],
+  classification_reviews: [],
+  card_adjustments: [],
   recurring_items: [],
   recurring_occurrences: [],
   credit_cards: [],

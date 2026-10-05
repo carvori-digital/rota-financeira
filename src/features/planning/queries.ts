@@ -32,6 +32,10 @@ export async function save(
   payload: Record<string, unknown>,
   existing = false,
 ) {
+  if (table === "card_purchases") {
+    if (existing) throw new Error("Use a correção auditável de compras");
+    return rpc("create_card_purchase", { p_id: id, p_payload: payload });
+  }
   const query = supabase!.from(table);
   const r = await (
     existing

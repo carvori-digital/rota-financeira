@@ -33,7 +33,8 @@ function QuickActionIcon({ kind }: { kind: string }) {
   return <Icon size={24} strokeWidth={1.8} aria-hidden="true" />;
 }
 import type { ReactNode, ReactElement, FormEvent } from "react";
-import { inputMoney, parseMoney } from "../../utils/finance";
+import { parseMoney } from "../../utils/finance";
+import { MoneyInput } from "../../components/MoneyInput";
 export type Money = (cents: number) => ReactNode;
 export function Field({
   label,
@@ -61,21 +62,23 @@ export function Amount({
   value,
   hidden,
   optional = false,
+  allowNegative = false,
 }: {
   label?: string;
   name?: string;
   value?: number | null;
   hidden: boolean;
   optional?: boolean;
+  allowNegative?: boolean;
 }) {
   return (
     <Field label={label}>
-      <input
+      <MoneyInput
         name={name}
-        type={hidden ? "password" : "text"}
-        inputMode="decimal"
+        hidden={hidden}
+        allowNegative={allowNegative}
         required={!optional}
-        defaultValue={value == null ? "" : inputMoney(value)}
+        cents={value}
         placeholder="0,00"
         autoComplete="off"
       />

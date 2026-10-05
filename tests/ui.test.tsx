@@ -18,6 +18,22 @@ import userEvent from "@testing-library/user-event";
 import App from "../src/App";
 import { act } from "react";
 import { today } from "../src/utils/finance";
+import { MoneyInput } from "../src/components/MoneyInput";
+
+it("input bancário desloca centavos, apaga e aceita colagem brasileira", async () => {
+  const user = userEvent.setup();
+  render(<MoneyInput aria-label="Valor bancário" />);
+  const input = screen.getByLabelText("Valor bancário") as HTMLInputElement;
+  await user.type(input, "1234");
+  expect(input.value).toBe("12,34");
+  await user.keyboard("{Backspace}");
+  expect(input.value).toBe("1,23");
+  for (const pasted of ["22,90", "R$ 22,90", "1.234,56"]) {
+    await user.paste(pasted);
+    expect(input.value).toBe(pasted.includes("1.234") ? "1234,56" : "22,90");
+  }
+  expect(input.inputMode).toBe("numeric");
+});
 
 // New organization checks keep every existing financial assertion below.
 describe("experiência: relatórios, extrato e atualização", () => {
@@ -312,6 +328,10 @@ beforeEach(() => {
     debts: [],
     debt_payments: [],
     reserve_account_links: [],
+    investments: [],
+    investment_movements: [],
+    classification_reviews: [],
+    card_adjustments: [],
   };
 });
 afterEach(cleanup);
@@ -387,7 +407,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
         exact: true,
       }),
     );
-    await user.type(screen.getByLabelText("Valor (R$)"), "10");
+    await user.type(screen.getByLabelText("Valor (R$)"), "10,00");
     await user.selectOptions(screen.getByLabelText("Categoria"), "c");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
@@ -425,7 +445,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
       screen.getByRole("button", { name: "Editar", exact: true }),
     );
     await user.clear(screen.getByLabelText("Valor (R$)"));
-    await user.type(screen.getByLabelText("Valor (R$)"), "20");
+    await user.type(screen.getByLabelText("Valor (R$)"), "20,00");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
     );
@@ -496,7 +516,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
         exact: true,
       }),
     );
-    await user.type(screen.getByLabelText("Valor (R$)"), "10");
+    await user.type(screen.getByLabelText("Valor (R$)"), "10,00");
     await user.selectOptions(screen.getByLabelText("Categoria"), "c");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
@@ -504,7 +524,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await screen.findByRole("alert");
     expect(
       (screen.getByLabelText("Valor (R$)") as HTMLInputElement).value,
-    ).toBe("10");
+    ).toBe("10,00");
     backend.writeError = false;
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
@@ -550,7 +570,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
       screen.getByRole("button", { name: "+ Criar", exact: true }),
     );
     await user.type(screen.getByLabelText("Nome"), "Reserva");
-    await user.type(screen.getByLabelText("Meta (R$)"), "1000");
+    await user.type(screen.getByLabelText("Meta (R$)"), "1000,00");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
     );
@@ -558,7 +578,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "+ Aporte", exact: true }),
     );
-    await user.type(screen.getByLabelText("Valor (R$)"), "50");
+    await user.type(screen.getByLabelText("Valor (R$)"), "50,00");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
     );
@@ -646,14 +666,13 @@ describe("disponível, reserva e privacidade", () => {
         ?.textContent,
     ).toMatch(/110,00/);
     expect(
-      screen.getByText("Patrimônio total nas contas").parentElement
-        ?.textContent,
+      screen.getByText("Patrimônio bruto estimado").parentElement?.textContent,
     ).toMatch(/610,00/);
     await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       screen.getByRole("button", { name: "Transferência", exact: true }),
     );
-    await user.type(screen.getByLabelText("Valor (R$)"), "25");
+    await user.type(screen.getByLabelText("Valor (R$)"), "25,00");
     await user.selectOptions(screen.getByLabelText("Conta de destino"), "i");
     await user.click(
       screen.getByRole("button", { name: "Salvar", exact: true }),
@@ -667,8 +686,7 @@ describe("disponível, reserva e privacidade", () => {
       screen.getByText("Investimentos e reserva").parentElement?.textContent,
     ).toMatch(/525,00/);
     expect(
-      screen.getByText("Patrimônio total nas contas").parentElement
-        ?.textContent,
+      screen.getByText("Patrimônio bruto estimado").parentElement?.textContent,
     ).toMatch(/610,00/);
     await user.click(
       within(screen.getByRole("navigation")).getByRole("button", {
@@ -680,7 +698,7 @@ describe("disponível, reserva e privacidade", () => {
       screen.getByRole("tab", { name: "Reserva e investimentos" }),
     );
     expect(
-      screen.getByRole("heading", { name: "Investimentos e Reserva" }),
+      screen.getByRole("heading", { name: "Proteção da reserva" }),
     ).toBeTruthy();
     expect(screen.getByText("Poupança fixture")).toBeTruthy();
     expect(screen.getByText("Investimento fixture")).toBeTruthy();
@@ -869,7 +887,7 @@ describe("integração V0.2", () => {
         exact: true,
       }),
     );
-    await user.type(screen.getByLabelText("Valor (R$)"), "100");
+    await user.type(screen.getByLabelText("Valor (R$)"), "100,00");
     await user.selectOptions(screen.getByLabelText("Categoria"), "d");
     await user.selectOptions(screen.getByLabelText("Conta"), "b");
     await user.click(

@@ -1,7 +1,7 @@
 import type { PlanningData } from "../planning/types";
 import type { Money } from "../planning/ui";
 import { Status } from "../planning/ui";
-import type { CreditCard, InvoiceSummary } from "./types";
+import type { CreditCard, InvoiceSummary, CardPurchase } from "./types";
 import { addMonths } from "../planning/dates";
 import { invoices, purchaseInstallments } from "./calculations";
 import { displayDate, today } from "../../utils/finance";
@@ -13,6 +13,9 @@ export function CardsPanel({
   onInvoice,
   onPay,
   onToggle,
+  onEditPurchase,
+  onCancelPurchase,
+  onAdjustPurchase,
 }: {
   plan: PlanningData;
   money: Money;
@@ -21,13 +24,24 @@ export function CardsPanel({
   onInvoice: (c: CreditCard) => void;
   onPay: (c: CreditCard, i: InvoiceSummary) => void;
   onToggle: (c: CreditCard) => void;
+  onEditPurchase: (p: CardPurchase) => void;
+  onCancelPurchase: (p: CardPurchase) => void;
+  onAdjustPurchase: (p: CardPurchase) => void;
 }) {
   const bills = invoices(
     plan.credit_cards,
     plan.card_purchases,
     plan.card_invoices,
     plan.card_payments,
+    plan.card_adjustments,
   );
+  const hasPayment = (purchase: CardPurchase) =>
+    purchaseInstallments(purchase).some((i) =>
+      plan.card_payments.some(
+        (p) =>
+          p.card_id === purchase.card_id && p.due_month === i.date.slice(0, 7),
+      ),
+    );
   return (
     <>
       <div className="section-heading">
@@ -46,6 +60,7 @@ export function CardsPanel({
         <article className="panel" key={c.id}>
           <h3>
             {c.name}
+            {c.holder_name ? ` · ${c.holder_name}` : ""}
             {!c.active ? " · Arquivado" : ""}
           </h3>
           <p>
@@ -147,13 +162,41 @@ export function CardsPanel({
                 <div className="invoice-block" key={p.id}>
                   <strong>
                     {p.description || "Compra"} · {money(p.amount_cents)}
+                    {p.cancelled_at ? " · Cancelada" : ""}
                   </strong>
+                  {!p.cancelled_at && (
+                    <>
+                      <div className="actions">
+                        <button
+                          disabled={hasPayment(p)}
+                          onClick={() => onEditPurchase(p)}
+                        >
+                          Editar compra
+                        </button>
+                        <button
+                          disabled={hasPayment(p)}
+                          onClick={() => onCancelPurchase(p)}
+                        >
+                          Cancelar compra
+                        </button>
+                        <button onClick={() => onAdjustPurchase(p)}>
+                          Ajuste de fatura
+                        </button>
+                      </div>
+                      {hasPayment(p) && (
+                        <small>
+                          Há pagamento vinculado. Para corrigir, registre um
+                          ajuste de fatura.
+                        </small>
+                      )}
+                    </>
+                  )}
                   <small>
                     {displayDate(p.purchase_date)} · {p.installments} parcela(s)
                     · término{" "}
                     {displayDate(purchaseInstallments(p).at(-1)!.date)} ·{" "}
                     {
-                      purchaseInstallments(p).filter(
+                      (p.cancelled_at ? [] : purchaseInstallments(p)).filter(
                         (i) =>
                           (bills.find(
                             (b) =>
@@ -177,6 +220,16 @@ export function CardsPanel({
           </details>
           <details>
             <summary>Histórico de pagamentos</summary>
+            {(plan.card_adjustments ?? [])
+              .filter((a) => a.card_id === c.id)
+              .map((a) => (
+                <div className="account-line" key={a.id}>
+                  <span>
+                    Ajuste · {a.description} · {a.due_month}
+                  </span>
+                  <strong>{money(a.amount_cents)}</strong>
+                </div>
+              ))}
             {plan.card_payments
               .filter((p) => p.card_id === c.id)
               .map((p) => (

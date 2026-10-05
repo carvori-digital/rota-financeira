@@ -173,7 +173,7 @@ export function Dashboard({
           <button onClick={() => onPlan("cards")}>
             <CreditCard size={21} />
             <span>Cartões</span>
-              <strong>{money(r.cardsPending)}</strong>
+            <strong>{money(r.cardsPending)}</strong>
             <small>Faturas restantes do mês</small>
           </button>
           <button onClick={() => onPlan("debts")}>
@@ -242,23 +242,32 @@ export function Dashboard({
         <dl className="finance-details">
           <div>
             <dt>Investimentos e reserva</dt>
-            <dd>{money(balances.reserve)}</dd>
+            <dd>{money(r.wealth.invested)}</dd>
           </div>
           <div>
-            <dt>Patrimônio total nas contas</dt>
-            <dd>{money(balances.total)}</dd>
+            <dt>Patrimônio bruto estimado</dt>
+            <dd>{money(r.wealth.gross)}</dd>
+          </div>
+          <div>
+            <dt>Patrimônio líquido estimado</dt>
+            <dd>{money(r.wealth.net)}</dd>
           </div>
         </dl>
-        {data.accounts.map((a) => (
-          <div className="account-line" key={a.id}>
-            <span>
-              {a.name}
-              {!a.is_active && " · Arquivada"}
-            </span>
-            <strong>{money(balance(a, data.transactions, asOf))}</strong>
-          </div>
-        ))}
-        <small>Patrimônio nas contas antes das dívidas e faturas.</small>
+        {data.accounts
+          .filter((a) => !a.investment_id)
+          .map((a) => (
+            <div className="account-line" key={a.id}>
+              <span>
+                {a.name}
+                {!a.is_active && " · Arquivada"}
+              </span>
+              <strong>{money(balance(a, data.transactions, asOf))}</strong>
+            </div>
+          ))}
+        <small>
+          Patrimônio líquido: contas e investimentos menos dívidas e faturas
+          pendentes.
+        </small>
       </details>
     </div>
   );

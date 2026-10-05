@@ -5,6 +5,7 @@ import { realized } from "../planning/calculations.ts";
 import { balance, isReserveAccount, isRealized } from "../../utils/finance.ts";
 import { essentialMonthly } from "../recurring/calculations.ts";
 import { invoices } from "../cards/calculations.ts";
+import { wealthSummary } from "../investments/calculations.ts";
 
 // Presentation models only: money and projections keep their existing source.
 export function experienceReport(
@@ -19,6 +20,7 @@ export function experienceReport(
     plan.card_purchases,
     plan.card_invoices,
     plan.card_payments.filter((p) => p.payment_date <= asOf),
+    plan.card_adjustments,
   );
   const completedKeys = new Set<string>();
   for (const transaction of report.paidItems) {
@@ -64,12 +66,19 @@ export function experienceReport(
         .filter((l) => l.goal_id === reserveGoal.id)
         .map((l) => l.account_id)
     : data.accounts.filter((a) => a.type === "savings").map((a) => a.id);
-  const reserve = data.accounts
-    .filter((a) => isReserveAccount(a) && selected.includes(a.id))
-    .reduce((s, a) => s + balance(a, data.transactions, asOf), 0);
+  const wealth = wealthSummary(data, plan, asOf);
+  const reserve =
+    wealth.reserve +
+    data.accounts
+      .filter(
+        (a) =>
+          !a.investment_id && isReserveAccount(a) && selected.includes(a.id),
+      )
+      .reduce((s, a) => s + balance(a, data.transactions, asOf), 0);
   const total = completed + pending.length;
   return {
     ...report,
+    wealth,
     cardsPending: report.current.items
       .filter((c) => c.source === "card")
       .reduce((s, c) => s + c.amount, 0),
@@ -92,7 +101,13 @@ export function periodReport(
   period: string,
   asOf: string,
 ) {
-  const actual = realized(data.transactions, plan.card_purchases, period, asOf);
+  const actual = realized(
+    data.transactions,
+    plan.card_purchases,
+    period,
+    asOf,
+    plan.card_adjustments,
+  );
   const result = actual.income - actual.expense;
   const categories = new Map<string, number>();
   const add = (id: string | null, amount: number) => {
@@ -110,9 +125,21 @@ export function periodReport(
     .forEach((t) => add(t.category_id, t.amount_cents));
   plan.card_purchases
     .filter(
-      (p) => p.purchase_date <= asOf && p.purchase_date.startsWith(period),
+      (p) =>
+        !p.cancelled_at &&
+        p.purchase_date <= asOf &&
+        p.purchase_date.startsWith(period),
     )
     .forEach((p) => add(p.category_id, p.amount_cents));
+  (plan.card_adjustments ?? [])
+    .filter((a) => a.due_date <= asOf && a.due_date.startsWith(period))
+    .forEach((a) =>
+      add(
+        plan.card_purchases.find((p) => p.id === a.purchase_id)?.category_id ??
+          null,
+        a.amount_cents,
+      ),
+    );
   return {
     ...actual,
     result,

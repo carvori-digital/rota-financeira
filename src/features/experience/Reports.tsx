@@ -9,6 +9,7 @@ import {
 } from "./calculations";
 import { today, displayDate } from "../../utils/finance";
 import { ReportChart } from "./ReportChart";
+import { Donut, Trend } from "./Charts";
 export function Reports({
   data,
   plan,
@@ -80,12 +81,14 @@ export function Reports({
           <p className="muted">
             Receitas menos consumo realizado. Compras no cartão entram uma vez,
             na data da compra. Pagar fatura e transferir entre contas não são um
-            novo consumo.
+            novo consumo. Ajustes de fatura entram no mês do vencimento
+            escolhido.
           </p>
         </details>
       </section>
       <section className="panel">
         <h2>Gastos por categoria</h2>
+        <Donut rows={actual.categories} hidden={hidden} />
         <ReportChart
           label="Despesas por categoria"
           hidden={hidden}
@@ -95,6 +98,14 @@ export function Reports({
       </section>
       <section className="panel">
         <h2>Evolução mensal</h2>
+        <Trend
+          rows={evolution.map((m) => ({
+            label: m.period.slice(5) + "/" + m.period.slice(2, 4),
+            value: m.result,
+          }))}
+          hidden={hidden}
+          label="Evolução do resultado mensal"
+        />
         {evolution.length > 1 ? (
           <>
             <div className="chart-legend">
@@ -289,6 +300,31 @@ export function Reports({
             </p>
           )}
         </details>
+      </section>
+      <section className="panel savings-report">
+        <h2>Patrimônio e investimentos</h2>
+        <dl className="finance-details">
+          <div>
+            <dt>Disponível</dt>
+            <dd>{money(r.wealth.available)}</dd>
+          </div>
+          <div>
+            <dt>Investimentos estimados · inclui reserva</dt>
+            <dd>{money(r.wealth.invested)}</dd>
+          </div>
+          <div>
+            <dt>Reserva de emergência</dt>
+            <dd>{money(r.reserve)}</dd>
+          </div>
+          <div>
+            <dt>Patrimônio bruto estimado</dt>
+            <dd>{money(r.wealth.gross)}</dd>
+          </div>
+          <div>
+            <dt>Patrimônio líquido estimado</dt>
+            <dd>{money(r.wealth.net)}</dd>
+          </div>
+        </dl>
       </section>
       <section className="panel savings-report">
         <h2>Taxa de economia</h2>

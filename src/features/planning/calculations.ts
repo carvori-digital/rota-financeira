@@ -38,6 +38,7 @@ export function projection(
     plan.card_purchases,
     plan.card_invoices,
     plan.card_payments,
+    plan.card_adjustments,
   )) {
     if (i.pending === 0 || i.due_date > through) continue;
     const card = plan.credit_cards.find((c) => c.id === i.card_id)!;
@@ -48,7 +49,10 @@ export function projection(
       name: `Fatura · ${card.name}`,
       due: i.due_date,
       amount: i.pending,
-      impact: cash(card.payment_account_id) ? -i.pending : 0,
+      impact:
+        card.payment_account_id === null || cash(card.payment_account_id)
+          ? -i.pending
+          : 0,
       direction: "expense",
     });
   }
@@ -159,6 +163,7 @@ export function realized(
   purchases: PlanningData["card_purchases"],
   month: string,
   asOf: string,
+  adjustments: PlanningData["card_adjustments"] = [],
 ) {
   const tx = transactions.filter(
     (t) => isRealized(t, asOf) && t.transaction_date.startsWith(month),
@@ -172,8 +177,14 @@ export function realized(
       .reduce((s, t) => s + t.amount_cents, 0) +
     purchases
       .filter(
-        (p) => p.purchase_date <= asOf && p.purchase_date.startsWith(month),
+        (p) =>
+          !p.cancelled_at &&
+          p.purchase_date <= asOf &&
+          p.purchase_date.startsWith(month),
       )
-      .reduce((s, p) => s + p.amount_cents, 0);
+      .reduce((s, p) => s + p.amount_cents, 0) +
+    adjustments
+      .filter((a) => a.due_date <= asOf && a.due_date.startsWith(month))
+      .reduce((s, a) => s + a.amount_cents, 0);
   return { income, expense };
 }

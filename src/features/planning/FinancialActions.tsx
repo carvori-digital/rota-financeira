@@ -82,6 +82,7 @@ export function FinancialActions({
           </p>
           <Amount
             label="Saldo atual correto (R$)"
+            allowNegative
             hidden={hidden}
             value={balance(action.account, data.transactions)}
           />

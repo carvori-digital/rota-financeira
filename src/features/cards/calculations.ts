@@ -4,6 +4,7 @@ import type {
   CardInvoice,
   CardPayment,
   InvoiceSummary,
+  CardAdjustment,
 } from "./types.ts";
 import { monthDay, addMonths } from "../planning/dates.ts";
 export function firstInvoiceDate(date: string, closing: number, due: number) {
@@ -27,6 +28,7 @@ export function invoices(
   purchases: CardPurchase[],
   manual: CardInvoice[],
   payments: CardPayment[],
+  adjustments: CardAdjustment[] = [],
 ): InvoiceSummary[] {
   const result = new Map<string, InvoiceSummary>();
   for (const invoice of manual)
@@ -39,24 +41,38 @@ export function invoices(
       pending: 0,
     });
   for (const purchase of purchases)
-    for (const installment of purchaseInstallments(purchase)) {
-      const month = installment.date.slice(0, 7),
-        key = `${purchase.card_id}:${month}`;
-      const baseline = manual.find(
-        (m) => m.card_id === purchase.card_id && m.due_month === month,
-      );
-      if (baseline && purchase.created_at <= baseline.covered_at) continue;
-      const item = result.get(key) ?? {
-        card_id: purchase.card_id,
-        month,
-        due_date: installment.date,
-        total: 0,
-        paid: 0,
-        pending: 0,
-      };
-      item.total += installment.amount;
-      result.set(key, item);
-    }
+    if (!purchase.cancelled_at)
+      for (const installment of purchaseInstallments(purchase)) {
+        const month = installment.date.slice(0, 7),
+          key = `${purchase.card_id}:${month}`;
+        const baseline = manual.find(
+          (m) => m.card_id === purchase.card_id && m.due_month === month,
+        );
+        if (baseline && purchase.created_at <= baseline.covered_at) continue;
+        const item = result.get(key) ?? {
+          card_id: purchase.card_id,
+          month,
+          due_date: installment.date,
+          total: 0,
+          paid: 0,
+          pending: 0,
+        };
+        item.total += installment.amount;
+        result.set(key, item);
+      }
+  for (const adjustment of adjustments) {
+    const key = `${adjustment.card_id}:${adjustment.due_month}`;
+    const item = result.get(key) ?? {
+      card_id: adjustment.card_id,
+      month: adjustment.due_month,
+      due_date: adjustment.due_date,
+      total: 0,
+      paid: 0,
+      pending: 0,
+    };
+    item.total += adjustment.amount_cents;
+    result.set(key, item);
+  }
   for (const payment of payments) {
     const key = `${payment.card_id}:${payment.due_month}`;
     const item = result.get(key);

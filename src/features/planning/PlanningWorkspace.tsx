@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { Investments } from "../investments/Investments";
 import { useRef, useState } from "react";
 import type { FinanceData, Transaction } from "../../types";
 import type { PlanningData, Commitment } from "./types";
-import type { CreditCard, InvoiceSummary } from "../cards/types";
+import type { CreditCard, InvoiceSummary, CardPurchase } from "../cards/types";
 import type { Debt } from "../debts/types";
 import type { RecurringItem } from "../recurring/types";
 import { Field, Amount, Modal, Status, cents, text } from "./ui";
@@ -24,6 +25,7 @@ export type PlanningAction = {
     | "occurrence"
     | "card"
     | "purchase"
+    | "purchaseAdjustment"
     | "invoice"
     | "cardPayment"
     | "debt"
@@ -33,6 +35,7 @@ export type PlanningAction = {
   due?: string;
   initialType?: "income" | "expense";
   card?: CreditCard;
+  purchase?: CardPurchase;
   invoice?: InvoiceSummary;
   debt?: Debt;
   rule?: RecurringItem;
@@ -89,7 +92,9 @@ export function PlanningWorkspace(props: Props) {
   const { reserveGoal, cost, selected, protectedMonths } = overview;
   const months = overview.targetMonths,
     actual = overview.reserve;
-  const reserveAccounts = data.accounts.filter(isReserveAccount);
+  const reserveAccounts = data.accounts.filter(
+    (a) => !a.investment_id && isReserveAccount(a),
+  );
   const legacy = data.transactions.filter(
     (t) =>
       t.is_recurring &&
@@ -256,6 +261,26 @@ export function PlanningWorkspace(props: Props) {
                 money={money}
                 onEdit={(card) => setAction({ kind: "card", card })}
                 onPurchase={(card) => setAction({ kind: "purchase", card })}
+                onEditPurchase={(purchase) =>
+                  setAction({ kind: "purchase", purchase })
+                }
+                onAdjustPurchase={(purchase) =>
+                  setAction({ kind: "purchaseAdjustment", purchase })
+                }
+                onCancelPurchase={(purchase) => {
+                  if (
+                    window.confirm(
+                      "Cancelar esta compra e suas parcelas? O registro permanecerá no histórico.",
+                    )
+                  )
+                    void run(() =>
+                      rpc("correct_card_purchase", {
+                        p_id: purchase.id,
+                        p_payload: {},
+                        p_cancel: true,
+                      }),
+                    );
+                }}
                 onInvoice={(card) => setAction({ kind: "invoice", card })}
                 onPay={(card, invoice) =>
                   setAction({ kind: "cardPayment", card, invoice })
@@ -350,8 +375,15 @@ export function PlanningWorkspace(props: Props) {
             )}
             {section === "reserve" && (
               <>
+                <Investments
+                  data={data}
+                  plan={plan}
+                  money={money}
+                  hidden={hidden}
+                  onSaved={onSaved}
+                />
                 <div className="section-heading">
-                  <h2>Investimentos e Reserva</h2>
+                  <h2>Proteção da reserva</h2>
                   <button onClick={() => setAction({ kind: "reserve" })}>
                     Ajustar reserva
                   </button>
@@ -415,13 +447,15 @@ export function PlanningWorkspace(props: Props) {
                     </dl>
                   </details>
                   <small>
-                    A reserva atual usa somente as contas selecionadas. Por
-                    padrão, poupanças. Transferências ou retiradas nessas contas
-                    atualizam a proteção; metas não movimentam dinheiro.
+                    A reserva reúne investimentos marcados como reserva de
+                    emergência e contas antigas selecionadas. Metas não
+                    movimentam dinheiro.
                   </small>
                 </article>
-                <h3>Onde está reservado/investido</h3>
-                {reserveAccounts.length ? (
+                {!!reserveAccounts.length && (
+                  <h3>Contas antigas aguardando migração</h3>
+                )}
+                {!!reserveAccounts.length &&
                   reserveAccounts.map((a) => (
                     <div className="account-line" key={a.id}>
                       <div>
@@ -436,22 +470,10 @@ export function PlanningWorkspace(props: Props) {
                       </div>
                       <strong>{money(balance(a, data.transactions))}</strong>
                     </div>
-                  ))
-                ) : (
-                  <p className="empty">
-                    Crie uma conta de poupança ou investimento em Ajustes.
-                  </p>
-                )}
+                  ))}
                 <div className="account-line">
                   <strong>Total em investimentos e reserva</strong>
-                  <strong>
-                    {money(
-                      reserveAccounts.reduce(
-                        (s, a) => s + balance(a, data.transactions),
-                        0,
-                      ),
-                    )}
-                  </strong>
+                  <strong>{money(overview.wealth.invested)}</strong>
                 </div>
               </>
             )}
@@ -460,7 +482,7 @@ export function PlanningWorkspace(props: Props) {
       )}
       {action && (
         <PlanningEditor
-          key={`${action.kind}:${action.card?.id ?? action.debt?.id ?? action.rule?.id ?? "new"}:${action.invoice?.month ?? ""}`}
+          key={`${action.kind}:${action.purchase?.id ?? action.card?.id ?? action.debt?.id ?? action.rule?.id ?? "new"}:${action.invoice?.month ?? ""}`}
           {...props}
           action={action}
           onClose={() => setAction(null)}
@@ -483,7 +505,10 @@ function PlanningEditor({
       action.rule?.type ?? action.initialType ?? "expense",
     );
   const [cardId, setCardId] = useState(
-    action.card?.id ?? plan.credit_cards.find((c) => c.active)?.id ?? "",
+    action.purchase?.card_id ??
+      action.card?.id ??
+      plan.credit_cards.find((c) => c.active)?.id ??
+      "",
   );
   const [debtId, setDebtId] = useState(
     action.debt?.id ??
@@ -498,18 +523,22 @@ function PlanningEditor({
     !!action.debt &&
     plan.debt_payments.some((p) => p.debt_id === action.debt?.id);
   const reserveGoal = data.goals.find((g) => g.is_emergency_reserve),
-    reserveAccounts = data.accounts.filter(isReserveAccount);
+    reserveAccounts = data.accounts.filter(
+      (a) => !a.investment_id && isReserveAccount(a),
+    );
   const currentInvoice = invoices(
     plan.credit_cards,
     plan.card_purchases,
     plan.card_invoices,
     plan.card_payments,
+    plan.card_adjustments,
   ).find((i) => i.card_id === cardId && i.month === today().slice(0, 7));
   const title = {
     installment: "Cadastrar parcelamento existente",
     occurrence: "Realizar ou pular ocorrência",
     card: action.card ? "Editar cartão" : "Adicionar cartão",
-    purchase: "Compra no cartão",
+    purchase: action.purchase ? "Editar compra" : "Compra no cartão",
+    purchaseAdjustment: "Ajuste rastreável de fatura",
     invoice: "Informar fatura atual",
     cardPayment: "Pagar fatura",
     debt: action.debt ? "Editar dívida" : "Adicionar dívida",
@@ -563,7 +592,10 @@ function PlanningEditor({
           name="category"
           key={kind}
           required
-          defaultValue={rule?.type === kind ? rule.category_id : ""}
+          defaultValue={
+            action.purchase?.category_id ??
+            (rule?.type === kind ? rule.category_id : "")
+          }
         >
           <option value="">Selecione</option>
           {data.categories
@@ -626,7 +658,8 @@ function PlanningEditor({
             limit_cents: cents(f, "limit", true),
             closing_day: Number(text(f, "closing")),
             due_day: Number(text(f, "due")),
-            payment_account_id: text(f, "account"),
+            payment_account_id: text(f, "account") || null,
+            holder_name: text(f, "holder") || null,
           },
           !!action.card,
         );
@@ -636,19 +669,39 @@ function PlanningEditor({
           throw new Error(
             "Adicione um cartão em Planejar antes de registrar a compra.",
           );
-        await save("card_purchases", id, {
-          card_id: cardId,
-          category_id: text(f, "category"),
-          amount_cents: amount(),
-          description: text(f, "description"),
-          purchase_date: text(f, "date"),
-          installments: Number(text(f, "installments")),
-          first_due_date: firstInvoiceDate(
-            text(f, "date"),
-            card!.closing_day,
-            card!.due_day,
-          ),
-          due_anchor_day: card!.due_day,
+        {
+          const payload = {
+            card_id: cardId,
+            category_id: text(f, "category"),
+            amount_cents: amount(),
+            description: text(f, "description"),
+            purchase_date: text(f, "date"),
+            installments: Number(text(f, "installments")),
+            first_due_date:
+              text(f, "firstDue") ||
+              firstInvoiceDate(
+                text(f, "date"),
+                card!.closing_day,
+                card!.due_day,
+              ),
+            due_anchor_day: card!.due_day,
+          };
+          if (action.purchase)
+            await rpc("correct_card_purchase", {
+              p_id: action.purchase.id,
+              p_payload: payload,
+              p_cancel: false,
+            });
+          else await save("card_purchases", id, payload);
+        }
+        break;
+      case "purchaseAdjustment":
+        await rpc("adjust_card_purchase", {
+          p_id: id,
+          p_purchase: action.purchase!.id,
+          p_due: text(f, "date"),
+          p_amount: amount() * (text(f, "direction") === "credit" ? -1 : 1),
+          p_description: text(f, "description"),
         });
         break;
       case "invoice":
@@ -817,6 +870,13 @@ function PlanningEditor({
       )}
       {action.kind === "card" && (
         <>
+          <Field label="Titular · opcional">
+            <input
+              name="holder"
+              maxLength={80}
+              defaultValue={action.card?.holder_name ?? ""}
+            />
+          </Field>
           <Amount
             label="Limite (R$) · opcional"
             name="limit"
@@ -848,7 +908,21 @@ function PlanningEditor({
               />
             </Field>
           </div>
-          {accountSelect("account", action.card?.payment_account_id)}
+          <Field label="Conta padrão · opcional">
+            <select
+              name="account"
+              defaultValue={action.card?.payment_account_id ?? ""}
+            >
+              <option value="">Escolher ao pagar</option>
+              {accounts
+                .filter((a) => !isReserveAccount(a))
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
         </>
       )}
       {["purchase", "invoice", "cardPayment"].includes(action.kind) && (
@@ -872,12 +946,16 @@ function PlanningEditor({
       )}
       {action.kind === "purchase" && (
         <>
-          <Amount hidden={hidden} />
+          <Amount hidden={hidden} value={action.purchase?.amount_cents} />
           {category()}
           <Field label="Descrição">
-            <input name="description" maxLength={240} />
+            <input
+              name="description"
+              maxLength={240}
+              defaultValue={action.purchase?.description}
+            />
           </Field>
-          {date()}
+          {date("date", action.purchase?.purchase_date ?? today())}
           <Field label="Número de parcelas">
             <input
               name="installments"
@@ -885,8 +963,15 @@ function PlanningEditor({
               inputMode="numeric"
               min={1}
               max={120}
-              defaultValue={1}
+              defaultValue={action.purchase?.installments ?? 1}
               required
+            />
+          </Field>
+          <Field label="Primeiro vencimento · opcional">
+            <input
+              name="firstDue"
+              type="date"
+              defaultValue={action.purchase?.first_due_date ?? ""}
             />
           </Field>
           <p className="muted">
@@ -911,6 +996,29 @@ function PlanningEditor({
             Informe o total atual da fatura. Esse valor substitui compras já
             cadastradas nesse mês; compras registradas depois serão somadas.
             Parcelas de outros meses permanecem.
+          </p>
+        </>
+      )}
+      {action.kind === "purchaseAdjustment" && (
+        <>
+          <p>
+            {action.purchase?.description} · o histórico original será
+            preservado.
+          </p>
+          <Field label="Tipo de ajuste">
+            <select name="direction">
+              <option value="credit">Crédito / estorno</option>
+              <option value="debit">Débito complementar</option>
+            </select>
+          </Field>
+          <Amount hidden={hidden} />
+          {date("date", today(), "Vencimento da fatura de destino")}
+          <Field label="Motivo">
+            <input name="description" required maxLength={240} />
+          </Field>
+          <p className="muted">
+            Créditos são limitados ao saldo pendente da fatura escolhida.
+            Pagamentos anteriores permanecem intactos.
           </p>
         </>
       )}
@@ -1071,7 +1179,13 @@ function PlanningEditor({
               defaultValue={reserveGoal?.reserve_months ?? 6}
             />
           </Field>
-          <p>Selecione as contas que compõem a reserva de emergência:</p>
+          <p>
+            Marque “Reserva de emergência” nos investimentos que compõem sua
+            proteção.
+          </p>
+          {!!reserveAccounts.length && (
+            <p>Contas antigas ainda não migradas:</p>
+          )}
           {reserveAccounts.map((a) => (
             <label className="check" key={a.id}>
               <input

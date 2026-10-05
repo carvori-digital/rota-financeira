@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { MoneyInput } from "./components/MoneyInput";
+import { ClassificationReviews } from "./features/investments/ClassificationReviews";
 import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
@@ -19,12 +21,7 @@ import { QuickSetup } from "./features/planning/QuickSetup";
 import { invoices } from "./features/cards/calculations";
 import { rpc } from "./features/planning/queries";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
-import {
-  inputMoney,
-  money as formatMoney,
-  parseMoney,
-  today,
-} from "./utils/finance";
+import { money as formatMoney, parseMoney, today } from "./utils/finance";
 type Editor =
   | { kind: "account"; row?: Account }
   | { kind: "category"; row?: Category }
@@ -234,6 +231,7 @@ export default function App() {
         planning.data.card_purchases,
         planning.data.card_invoices,
         planning.data.card_payments,
+        planning.data.card_adjustments,
       ).find((i) => i.card_id === c.entity && i.month === c.due.slice(0, 7));
       if (card && invoice)
         setPlanningAction({ kind: "cardPayment", card, invoice });
@@ -269,6 +267,7 @@ export default function App() {
         planning.data.card_purchases,
         planning.data.card_invoices,
         planning.data.card_payments,
+        planning.data.card_adjustments,
       ).find((i) => i.card_id === cardId && i.month === invoiceMonth);
       if (card && invoice)
         setPlanningAction({ kind: "cardPayment", card, invoice });
@@ -401,6 +400,11 @@ export default function App() {
             {page === "settings" && (
               <>
                 <h1>Ajustes</h1>
+                <ClassificationReviews
+                  data={data}
+                  plan={planning.data}
+                  onSaved={refresh}
+                />
                 <button onClick={() => setSetup(true)}>
                   Configuração rápida
                 </button>
@@ -411,39 +415,41 @@ export default function App() {
                     + Criar
                   </button>
                 </div>
-                {data.accounts.map((a) => (
-                  <div className="settings-row" key={a.id}>
-                    <div>
-                      <strong>{a.name}</strong>
-                      <small>
-                        {accountTypes[a.type]} ·{" "}
-                        {a.is_active ? "Ativa" : "Arquivada"}
-                      </small>
+                {data.accounts
+                  .filter((a) => !a.investment_id)
+                  .map((a) => (
+                    <div className="settings-row" key={a.id}>
+                      <div>
+                        <strong>{a.name}</strong>
+                        <small>
+                          {accountTypes[a.type]} ·{" "}
+                          {a.is_active ? "Ativa" : "Arquivada"}
+                        </small>
+                      </div>
+                      <div className="actions">
+                        <button
+                          onClick={() => setEditor({ kind: "account", row: a })}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() =>
+                            setFinancialAction({ kind: "adjust", account: a })
+                          }
+                        >
+                          Ajustar saldo atual
+                        </button>
+                        <button
+                          disabled={operation}
+                          onClick={() =>
+                            void archive("accounts", a.id, a.is_active)
+                          }
+                        >
+                          {a.is_active ? "Arquivar" : "Reativar"}
+                        </button>
+                      </div>
                     </div>
-                    <div className="actions">
-                      <button
-                        onClick={() => setEditor({ kind: "account", row: a })}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() =>
-                          setFinancialAction({ kind: "adjust", account: a })
-                        }
-                      >
-                        Ajustar saldo atual
-                      </button>
-                      <button
-                        disabled={operation}
-                        onClick={() =>
-                          void archive("accounts", a.id, a.is_active)
-                        }
-                      >
-                        {a.is_active ? "Arquivar" : "Reativar"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
                 <div className="section-heading">
                   <h2>Categorias</h2>
                   <button onClick={() => setEditor({ kind: "category" })}>
@@ -575,7 +581,11 @@ export default function App() {
             setPage("home");
           }}
           onAction={(kind) => {
-            if (kind === "account") setEditor({ kind: "account" });
+            if (kind === "investments") {
+              setSetup(false);
+              setPlanningSection("reserve");
+              setPage("planning");
+            } else if (kind === "account") setEditor({ kind: "account" });
             else if (kind === "schedule")
               setFinancialAction({ kind: "schedule" });
             else if (kind.startsWith("adjust:")) {
@@ -608,6 +618,7 @@ export default function App() {
             planning.data.card_purchases,
             planning.data.card_invoices,
             planning.data.card_payments,
+            planning.data.card_adjustments,
           )
             .filter((i) => i.pending > 0)
             .map((i) => ({
@@ -999,17 +1010,14 @@ function EditorForm({
           {(editor.kind === "transaction" ||
             editor.kind === "contribution") && (
             <Field label="Valor (R$)">
-              <input
+              <MoneyInput
                 className="amount-input"
                 required
                 name="amount"
-                inputMode="decimal"
-                type={valuesHidden ? "password" : "text"}
+                hidden={valuesHidden}
                 autoComplete="off"
                 placeholder={valuesHidden ? "••••" : "0,00"}
-                defaultValue={
-                  transaction ? inputMoney(transaction.amount_cents) : ""
-                }
+                cents={transaction?.amount_cents}
               />
             </Field>
           )}
@@ -1032,22 +1040,31 @@ function EditorForm({
                   name="account_type"
                   defaultValue={editor.row?.type ?? "checking"}
                 >
-                  {Object.entries(accountTypes).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
+                  {Object.entries(accountTypes)
+                    .filter(([k]) =>
+                      [
+                        "checking",
+                        "wallet",
+                        "other",
+                        editor.row?.type,
+                      ].includes(k),
+                    )
+                    .map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
                 </select>
               </Field>
               {!editor.row && (
                 <Field label="Saldo atual (R$)">
-                  <input
+                  <MoneyInput
                     required
                     name="initial"
-                    inputMode="decimal"
-                    type={valuesHidden ? "password" : "text"}
+                    hidden={valuesHidden}
+                    allowNegative
                     autoComplete="off"
-                    defaultValue={inputMoney(0)}
+                    cents={0}
                   />
                 </Field>
               )}
@@ -1060,27 +1077,21 @@ function EditorForm({
           {editor.kind === "goal" && (
             <>
               <Field label="Meta (R$)">
-                <input
+                <MoneyInput
                   required
                   name="target"
-                  inputMode="decimal"
-                  type={valuesHidden ? "password" : "text"}
+                  hidden={valuesHidden}
                   autoComplete="off"
-                  defaultValue={
-                    editor.row ? inputMoney(editor.row.target_amount_cents) : ""
-                  }
+                  cents={editor.row?.target_amount_cents}
                 />
               </Field>
               <Field label="Já acumulado (R$)">
-                <input
+                <MoneyInput
                   required
                   name="initial"
-                  inputMode="decimal"
-                  type={valuesHidden ? "password" : "text"}
+                  hidden={valuesHidden}
                   autoComplete="off"
-                  defaultValue={inputMoney(
-                    editor.row?.initial_amount_cents ?? 0,
-                  )}
+                  cents={editor.row?.initial_amount_cents ?? 0}
                 />
               </Field>
               <Field label="Data desejada (opcional)">

@@ -35,6 +35,10 @@ const names = new Set([
   "debts",
   "debt_payments",
   "reserve_account_links",
+  "investments",
+  "investment_movements",
+  "classification_reviews",
+  "card_adjustments",
 ]);
 const identifier = (value) => {
   assert.match(value, /^[a-z_]+$/);
@@ -46,7 +50,7 @@ const normalize = (rows) =>
       Object.entries(row).map(([key, value]) => [
         key,
         value instanceof Date
-          ? value.toISOString().slice(0, key.endsWith("_date") ? 10 : 24)
+          ? value.toISOString().slice(0, key === "date" || key.endsWith("_date") ? 10 : 24)
           : key.endsWith("_cents") && value !== null
             ? Number(value)
             : value,
@@ -62,6 +66,8 @@ try {
     "202610010002_planning.sql",
     "202610010003_planning_integrity.sql",
     "202610020004_financial_clarity.sql",
+    "202610030005_investments.sql",
+    "202610030006_card_corrections.sql",
   ])
     await db.exec(
       await readFile(
@@ -179,6 +185,11 @@ try {
             "resolve_recurring",
             "repeat_transaction",
             "save_emergency_reserve",
+            "create_card_purchase",
+            "correct_card_purchase",
+            "adjust_card_purchase",
+            "record_investment_movement",
+            "keep_classification",
             "resolve_transaction",
             "adjust_account_balance",
           ].includes(table),
@@ -316,7 +327,7 @@ try {
   await tab("Cartões").click();
   await button("Adicionar cartão").first().click();
   await field("Nome").fill("Cartão local");
-  await field("Limite (R$) · opcional").fill("2000");
+  await field("Limite (R$) · opcional").fill("2000,00");
   await field("Dia do fechamento").fill("20");
   await field("Dia do vencimento").fill("28");
   await fit("375px criar cartão");
@@ -340,11 +351,11 @@ try {
   await nav("Planejar").click();
   await tab("Cartões").click();
   await button("Informar fatura atual").click();
-  await field("Valor (R$)").fill("120");
+  await field("Valor (R$)").fill("120,00");
   await field("Vencimento").fill(`${today.slice(0, 7)}-28`);
   await save();
   await button("Pagar fatura").first().click();
-  await field("Valor (R$)").fill("20");
+  await field("Valor (R$)").fill("20,00");
   await save();
   assert.equal(
     Number(
@@ -356,19 +367,19 @@ try {
   await tab("Dívidas e parcelas").click();
   await button("Adicionar dívida").first().click();
   await field("Nome").fill("Dívida local");
-  await field("Dívida original (R$)").fill("300");
-  await field("Quanto falta pagar (R$)").fill("250");
-  await field("Parcela mensal (R$) · opcional").fill("100");
+  await field("Dívida original (R$)").fill("300,00");
+  await field("Quanto falta pagar (R$)").fill("250,00");
+  await field("Parcela mensal (R$) · opcional").fill("100,00");
   await field("Próximo vencimento · opcional").fill(`${today.slice(0, 7)}-28`);
   await save();
   await button("Editar dívida").click();
   await field("Nome").fill("Dívida editada");
   await field("Próximo vencimento · opcional").fill(`${today.slice(0, 7)}-27`);
-  await field("Parcela mensal (R$) · opcional").fill("80");
+  await field("Parcela mensal (R$) · opcional").fill("80,00");
   await save();
   await nav("Início").click();
   await quick("Pagamento de dívida");
-  await field("Valor (R$)").fill("30");
+  await field("Valor (R$)").fill("30,00");
   await save();
   assert.equal(
     Number(
@@ -381,13 +392,13 @@ try {
   await tab("Recorrentes").click();
   await button("Adicionar recorrente").click();
   await field("Nome").fill("Conta essencial");
-  await field("Valor (R$)").fill("50");
+  await field("Valor (R$)").fill("50,00");
   await field("Categoria").selectOption(expense);
   await field("Primeira ocorrência").fill(today);
   await field("Despesa essencial").check();
   await save();
   await button("Editar regra").click();
-  await field("Valor (R$)").fill("60");
+  await field("Valor (R$)").fill("60,00");
   await save();
   await button("Realizar").first().click();
   await page
@@ -410,18 +421,52 @@ try {
   await button("Ajustar reserva").click();
   await field(
     "Custo essencial mensal (R$) · deixe vazio para usar sugestão",
-  ).fill("100");
+  ).fill("100,00");
   await field("Meses de proteção").fill("6");
   await save();
   assert.equal((await query("select * from reserve_account_links")).length, 1);
+  await button("Adicionar investimento").click();
+  await field("Nome").fill("Reserva com rendimento");
+  await field("Instituição").fill("Banco local");
+  await field("Rendimento").selectOption("fixed_annual");
+  await field("Taxa fixa (%)").fill("10");
+  await field("Reserva de emergência").check();
+  await save();
+  await button("Aportar").click();
+  await field("Valor (R$)").fill("100,00");
+  await field("Conta de origem").selectOption(cash);
+  await save();
+  await button("Resgatar").click();
+  await field("Valor (R$)").fill("25,00");
+  await field("Conta de destino").selectOption(cash);
+  await save();
+  await page.getByText("Valor real e histórico", { exact: true }).click();
+  await button("Sincronizar valor atual").click();
+  await field("Valor real no banco (R$)").fill("80,00");
+  await field("Descrição").fill("Conferência local");
+  await save();
+  assert.equal(
+    Number(
+      (
+        await query(
+          "select investment_value(id,financial_date()) value from investments",
+        )
+      )[0].value,
+    ),
+    8000,
+  );
+  assert.equal((await query("select * from investment_movements")).length, 3);
+  results.push(
+    "investimento com taxa fixa, aporte, resgate e sincronização atômicos via UI/RLS",
+  );
   await nav("Início").click();
   await quick("Receita");
-  await field("Valor (R$)").fill("200");
+  await field("Valor (R$)").fill("200,00");
   await field("Categoria").selectOption({ label: "Salário" });
   await field("Conta").selectOption(cash);
   await save();
   await quick("Despesa");
-  await field("Valor (R$)").fill("10");
+  await field("Valor (R$)").fill("10,00");
   await field("Categoria").selectOption(expense);
   await field("Conta").selectOption(reserve);
   await save();
@@ -431,16 +476,16 @@ try {
   await quick("Transferência");
   await field("Conta de origem").selectOption(cash);
   await field("Conta de destino").selectOption(reserve);
-  await field("Valor (R$)").fill("40");
+  await field("Valor (R$)").fill("40,00");
   await save();
   await quick("Aporte/transferência");
   await button("Aportar em Viagem local").click();
-  await field("Valor (R$)").fill("25");
+  await field("Valor (R$)").fill("25,00");
   await save();
   assert.equal((await query("select * from goal_contributions")).length, 1);
   // Creating a transaction with recurrence uses the real atomic RPC.
   await quick("Despesa");
-  await field("Valor (R$)").fill("5");
+  await field("Valor (R$)").fill("5,00");
   await field("Categoria").selectOption(expense);
   await field("Conta").selectOption(cash);
   await field("Recorrente").check();
@@ -462,7 +507,7 @@ try {
   const beforePending = await actualCash();
   await quick("Programar");
   await field("Descrição").fill("Tarifa programada");
-  await field("Valor (R$)").fill("10");
+  await field("Valor (R$)").fill("10,00");
   await field("Conta").selectOption(cash);
   await field("Categoria").selectOption(expense);
   await field("Data prevista").fill("2020-01-01");
@@ -487,7 +532,7 @@ try {
   await scheduled()
     .getByRole("button", { name: "Editar programada", exact: true })
     .click();
-  await field("Valor (R$)").fill("12");
+  await field("Valor (R$)").fill("12,00");
   await save();
   await scheduled()
     .getByRole("button", { name: "Confirmar / cancelar", exact: true })
@@ -496,7 +541,7 @@ try {
   assert.equal(await actualCash(), beforePending - 1200);
   await quick("Programar");
   await field("Descrição").fill("Cancelar programada");
-  await field("Valor (R$)").fill("10");
+  await field("Valor (R$)").fill("10,00");
   await field("Conta").selectOption(cash);
   await field("Categoria").selectOption(expense);
   await save();
@@ -511,10 +556,10 @@ try {
   assert.equal(await actualCash(), beforePending - 1200);
   await quick("Dívida / parcelamento");
   await field("Nome").fill("Parcelamento 8 de 14");
-  await field("Valor por parcela (R$)").fill("100");
+  await field("Valor por parcela (R$)").fill("100,00");
   await field("Parcela atual").fill("8");
   await field("Total de parcelas").fill("14");
-  await field("Saldo restante conhecido (R$) · opcional").fill("650");
+  await field("Saldo restante conhecido (R$) · opcional").fill("650,00");
   await field("Próximo vencimento").fill(today.slice(0, 7) + "-31");
   await save();
   await tab("Dívidas e parcelas").click();
@@ -525,7 +570,7 @@ try {
     .filter({ hasText: "Conta local" })
     .getByRole("button", { name: "Ajustar saldo atual", exact: true })
     .click();
-  await field("Saldo atual correto (R$)").fill("-25");
+  await field("Saldo atual correto (R$)").fill("-25,00");
   await save();
   assert.equal(await actualCash(), -2500);
   assert.equal(
@@ -571,6 +616,11 @@ try {
     await button("Compra no cartão").click();
     await fit(`${width}px compra parcelada modal`);
     await button("Fechar").click();
+    await tab("Reserva e investimentos").click();
+    await button("Adicionar investimento").click();
+    await fit(`${width}px investimento modal`);
+    await capture(`${width}-investment-form`);
+    await button("Fechar").click();
     await tab("Dívidas e parcelas").click();
     await button("Registrar pagamento").first().click();
     await fit(`${width}px pagamento dívida modal`);
@@ -604,7 +654,7 @@ try {
         errors,
         outbound,
         backend:
-          "PGlite com RLS authenticated e migrations 001+002+003+004; Auth e HTTP simulados; nenhum acesso remoto",
+          "PGlite com RLS authenticated e migrations 001–006; Auth e HTTP simulados; nenhum acesso remoto",
       },
       null,
       2,

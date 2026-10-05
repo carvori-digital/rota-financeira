@@ -202,6 +202,12 @@ export function Movements({
                   )}
                   {t.status !== "pending" &&
                     !t.payment_reference &&
+                    !data.accounts.some(
+                      (a) =>
+                        a.investment_id &&
+                        (a.id === t.account_id ||
+                          a.id === t.destination_account_id),
+                    ) &&
                     t.type !== "adjustment" && (
                       <details className="movement-menu">
                         <summary

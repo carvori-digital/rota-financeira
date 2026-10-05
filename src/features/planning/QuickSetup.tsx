@@ -70,8 +70,8 @@ export function QuickSetup({
             </button>
           ))}
       {step === 6 && (
-        <button onClick={() => onAction("account")}>
-          Adicionar conta de reserva / investimento
+        <button onClick={() => onAction("investments")}>
+          Abrir investimentos
         </button>
       )}
       <div className="actions">

@@ -66,6 +66,7 @@ export function monthReport(
       plan.card_purchases,
       current.month,
       asOf,
+      plan.card_adjustments,
     ),
   };
 }
