@@ -209,7 +209,7 @@ for (let i = 1; i <= 3; i++) {
     transaction(
       `expense-${i}`,
       "expense",
-      500000,
+      i === 1 ? 620000 : 500000,
       "Despesas do mês",
       "home",
       period,
