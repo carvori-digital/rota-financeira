@@ -93,45 +93,60 @@ export function Donut({
     </div>
   );
 }
-export function Trend({
+export function MonthlyColumns({
   rows,
   hidden,
-  label,
+  money,
+  scale,
 }: {
-  rows: { label: string; value: number }[];
+  rows: {
+    period: string;
+    income: number;
+    expense: number;
+    result: number;
+  }[];
   hidden: boolean;
-  label: string;
+  money: Money;
+  scale: number;
 }) {
-  if (hidden || rows.length < 2) return null;
-  const min = Math.min(0, ...rows.map((r) => r.value)),
-    max = Math.max(1, ...rows.map((r) => r.value)),
-    range = max - min;
-  const points = rows
-    .map(
-      (r, i) =>
-        `${20 + (i * 280) / (rows.length - 1)},${120 - ((r.value - min) / range) * 95}`,
-    )
-    .join(" ");
+  if (hidden)
+    return <p className="muted">Gráfico oculto junto com os valores.</p>;
   return (
-    <svg
-      role="img"
-      aria-label={label}
-      viewBox="0 0 320 155"
-      style={{ width: "100%", maxHeight: 210 }}
+    <div
+      className="monthly-columns"
+      role="group"
+      aria-label="Comparação mensal em colunas"
     >
-      <polyline points={points} fill="none" stroke="#65764e" strokeWidth="3" />
-      {rows.map((r, i) => (
-        <text
-          key={r.label}
-          x={20 + (i * 280) / (rows.length - 1)}
-          y="148"
-          textAnchor="middle"
-          fontSize="10"
-          fill="currentColor"
+      {rows.map((month) => (
+        <article
+          className="monthly-column-month"
+          key={month.period}
+          role="group"
+          aria-label={`Comparação ${month.period}`}
         >
-          {r.label}
-        </text>
+          <h3>{month.period.split("-").reverse().join("/")}</h3>
+          <div className="monthly-bars">
+            {[
+              { label: "Receitas", value: month.income, tone: "income" },
+              { label: "Despesas", value: month.expense, tone: "outflow" },
+              { label: "Resultado", value: month.result, tone: "result" },
+            ].map((item) => (
+              <div className="monthly-bar-item" key={item.label}>
+                <strong>{money(item.value)}</strong>
+                <div className="monthly-bar-axis" aria-hidden="true">
+                  <span
+                    className={`monthly-bar ${item.tone} ${item.value < 0 ? "negative" : ""}`}
+                    style={{
+                      height: `${Math.max(item.value === 0 ? 0 : 2, (Math.abs(item.value) / scale) * 50)}%`,
+                    }}
+                  />
+                </div>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </article>
       ))}
-    </svg>
+    </div>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { MoneyInput } from "./components/MoneyInput";
-import { ClassificationReviews } from "./features/investments/ClassificationReviews";
 import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
@@ -476,14 +475,6 @@ export default function App() {
                       </button>
                     </div>
                   ))}
-                </details>
-                <details className="settings-section">
-                  <summary>Ferramentas avançadas</summary>
-                  <ClassificationReviews
-                    data={data}
-                    plan={planning.data}
-                    onSaved={refresh}
-                  />
                 </details>
                 <div className="panel">
                   <h3>No iPhone</h3>

@@ -88,7 +88,7 @@ try {
     const projected = await page.locator(".month-hero h2").innerText();
     await nav("Relatórios").click();
     await fit(`${width}px Reports`);
-    assert.equal(await page.locator(".evolution-period").count(), 1);
+    assert.equal(await page.locator(".monthly-column-month").count(), 1);
     const legendMatches = await page.evaluate(() => {
       const markers = [...document.querySelectorAll(".category-marker")],
         segments = [
@@ -114,11 +114,12 @@ try {
       exact: true,
     });
     await unselected.click();
-    assert.equal(await page.locator(".evolution-period").count(), 2);
+    assert.equal(await page.locator(".monthly-column-month").count(), 2);
+    assert.ok((await page.locator(".monthly-bar.negative").count()) > 0);
     await fit(`${width}px selected month comparison`);
     await capture(`${width}-comparison`);
     await unselected.click();
-    assert.equal(await page.locator(".evolution-period").count(), 1);
+    assert.equal(await page.locator(".monthly-column-month").count(), 1);
     await capture(`${width}-reports`);
     for (const title of [
       "Fluxo do mês",
@@ -160,6 +161,11 @@ try {
     await nav("Ajustes").click();
     assert.equal(await page.locator(".settings-account[open]").count(), 0);
     assert.equal(await page.locator(".settings-section[open]").count(), 0);
+    assert.equal(await page.getByText(/Revisar classificação/).count(), 0);
+    assert.equal(
+      await page.getByText("Ferramentas avançadas", { exact: true }).count(),
+      0,
+    );
     await fit(`${width}px compact settings`);
     await capture(`${width}-settings`);
     await page.locator(".settings-account summary").first().click();
@@ -170,7 +176,6 @@ try {
       1,
     );
     await page.getByText(/^Categorias ·/).click();
-    await page.getByText("Ferramentas avançadas", { exact: true }).click();
     await fit(`${width}px expanded settings`);
     await capture(`${width}-settings-expanded`);
     await nav("Movimentos").click();

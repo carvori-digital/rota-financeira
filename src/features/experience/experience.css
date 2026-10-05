@@ -547,46 +547,84 @@ progress::-webkit-progress-value {
   overflow-wrap: anywhere;
   text-align: right;
 }
-.chart-legend {
+.monthly-columns {
   display: flex;
-  gap: 15px;
+  gap: 12px;
+  margin: 18px -4px 10px;
+  padding: 4px 4px 12px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: inline proximity;
+}
+.monthly-column-month {
+  flex: 0 0 min(250px, calc(100vw - 72px));
+  padding: 14px 12px 12px;
+  border: 1px solid #e4e9df;
+  border-radius: 14px;
+  scroll-snap-align: start;
+}
+.monthly-column-month h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  text-align: center;
+}
+.monthly-bars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.monthly-bar-item {
+  min-width: 0;
+  text-align: center;
+}
+.monthly-bar-item > strong {
+  display: block;
+  min-height: 30px;
   font-size: 10px;
-  margin: 18px 0;
-  color: #7a8578;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
-.chart-legend span::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
+.monthly-bar-item > span:last-child {
+  display: block;
+  margin-top: 7px;
+  color: #667064;
+  font-size: 9px;
+}
+.monthly-bar-axis {
+  position: relative;
+  height: 126px;
+  border-radius: 8px;
+  background: linear-gradient(
+    to bottom,
+    #f7f8f4 0,
+    #f7f8f4 calc(50% - 1px),
+    #aab4a4 calc(50% - 1px),
+    #aab4a4 calc(50% + 1px),
+    #f7f8f4 calc(50% + 1px),
+    #f7f8f4 100%
+  );
+  overflow: hidden;
+}
+.monthly-bar {
+  position: absolute;
+  bottom: 50%;
+  left: 18%;
+  width: 64%;
+  min-height: 0;
+  border-radius: 5px 5px 0 0;
   background: #70936e;
-  margin-right: 5px;
-  border-radius: 50%;
 }
-.chart-legend span:nth-child(2)::before {
+.monthly-bar.outflow {
   background: #bdab85;
 }
-.chart-legend span:nth-child(3)::before {
+.monthly-bar.result {
   background: #3a6350;
 }
-.evolution-chart {
-  display: grid;
-  gap: 20px;
-}
-.evolution-period {
-  padding-bottom: 15px;
-  border-bottom: 1px solid #edf0e7;
-}
-.evolution-period h3 {
-  font-size: 12px;
-  margin: 0;
-}
-.evolution-period .chart-label {
-  font-size: 10px;
-}
-.evolution-period .report-chart {
-  gap: 9px;
-  margin-top: 9px;
+.monthly-bar.negative {
+  top: 50%;
+  bottom: auto;
+  border-radius: 0 0 5px 5px;
+  background: #b77578;
 }
 .debt-progress {
   display: grid;
@@ -830,8 +868,8 @@ dialog {
   .month-hero h2 {
     font-size: 43px;
   }
-  .evolution-chart {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .monthly-column-month {
+    flex-basis: 260px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
