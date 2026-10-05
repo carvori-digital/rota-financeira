@@ -79,6 +79,14 @@ describe("experiência: relatórios, extrato e atualização", () => {
     const legend = screen.getByRole("list", {
       name: "Legenda dos gastos por categoria",
     });
+    const categories = screen
+      .getByRole("heading", { name: "Gastos por categoria" })
+      .closest("section")!;
+    expect(
+      within(categories).queryByRole("group", {
+        name: "Despesas por categoria",
+      }),
+    ).toBeNull();
     expect(within(legend).getByText("Alimentação")).toBeTruthy();
     expect(within(legend).getByText("75,0%")).toBeTruthy();
     expect(within(legend).getByText("25,0%")).toBeTruthy();
@@ -101,24 +109,29 @@ describe("experiência: relatórios, extrato e atualização", () => {
     const evolution = screen
       .getByRole("heading", { name: "Evolução mensal" })
       .closest("section")!;
-    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(1);
+    expect(evolution.querySelectorAll(".monthly-column-month")).toHaveLength(1);
     const previousLabel = previous.split("-").reverse().join("/"),
       currentLabel = currentMonth.split("-").reverse().join("/");
     expect(
-      within(evolution).queryByRole("group", { name: `Evolução ${previous}` }),
+      within(evolution).queryByRole("group", {
+        name: `Comparação ${previous}`,
+      }),
     ).toBeNull();
     await user.click(
       within(evolution).getByRole("button", { name: previousLabel }),
     );
-    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(2);
+    expect(evolution.querySelectorAll(".monthly-column-month")).toHaveLength(2);
+    expect(evolution.querySelectorAll(".monthly-bar.negative").length).toBe(2);
     const summary = screen.getByLabelText("Mês do resumo") as HTMLInputElement;
     fireEvent.change(summary, { target: { value: previous } });
-    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(2);
+    expect(evolution.querySelectorAll(".monthly-column-month")).toHaveLength(2);
     await user.click(
       within(evolution).getByRole("button", { name: previousLabel }),
     );
     expect(
-      within(evolution).queryByRole("group", { name: `Evolução ${previous}` }),
+      within(evolution).queryByRole("group", {
+        name: `Comparação ${previous}`,
+      }),
     ).toBeNull();
     await user.click(
       within(evolution).getByRole("button", { name: currentLabel }),
@@ -129,7 +142,7 @@ describe("experiência: relatórios, extrato e atualização", () => {
     expect(JSON.stringify(backend.rows)).toBe(before);
     expect(backend.writes).toHaveLength(0);
   });
-  it("Ajustes recolhe ações, categorias e ferramentas sem escrever dados", async () => {
+  it("Ajustes recolhe contas e categorias sem expor revisão de classificação", async () => {
     const user = await open(),
       before = JSON.stringify(backend.rows);
     await user.click(
@@ -143,13 +156,8 @@ describe("experiência: relatórios, extrato e atualização", () => {
         ".settings-account,.settings-section",
       )
       .forEach((section) => expect(section.open).toBe(false));
-    expect(
-      screen.queryByText(/Revisar classificação/, { selector: "summary" }),
-    ).toBeTruthy();
-    const advanced = screen
-      .getByText("Ferramentas avançadas")
-      .closest("details")!;
-    expect(advanced.open).toBe(false);
+    expect(screen.queryByText(/Revisar classificação/)).toBeNull();
+    expect(screen.queryByText("Ferramentas avançadas")).toBeNull();
     await user.click(screen.getByText("Principal", { exact: true }));
     const account = screen
       .getByText("Principal", { exact: true })
@@ -170,8 +178,6 @@ describe("experiência: relatórios, extrato e atualização", () => {
     await user.click(
       screen.getByRole("button", { name: "Fechar", exact: true }),
     );
-    await user.click(screen.getByText("Ferramentas avançadas"));
-    expect(advanced.open).toBe(true);
     expect(JSON.stringify(backend.rows)).toBe(before);
     expect(backend.writes).toHaveLength(0);
   });

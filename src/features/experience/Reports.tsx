@@ -10,7 +10,7 @@ import {
 } from "./calculations";
 import { today, displayDate } from "../../utils/finance";
 import { ReportChart } from "./ReportChart";
-import { Donut, Trend } from "./Charts";
+import { Donut, MonthlyColumns } from "./Charts";
 export function Reports({
   data,
   plan,
@@ -99,12 +99,6 @@ export function Reports({
       <section className="panel">
         <h2>Gastos por categoria</h2>
         <Donut rows={actual.categories} hidden={hidden} money={money} />
-        <ReportChart
-          label="Despesas por categoria"
-          hidden={hidden}
-          money={money}
-          rows={actual.categories}
-        />
       </section>
       <section className="panel">
         <h2>Evolução mensal</h2>
@@ -133,39 +127,14 @@ export function Reports({
             ))}
           </div>
         </fieldset>
-        <Trend
-          rows={evolution.map((m) => ({
-            label: m.period.slice(5) + "/" + m.period.slice(2, 4),
-            value: m.result,
-          }))}
-          hidden={hidden}
-          label="Evolução do resultado mensal"
-        />
         {evolution.length > 0 ? (
           <>
-            <div className="chart-legend">
-              <span>Receitas</span>
-              <span>Despesas</span>
-              <span>Resultado</span>
-            </div>
-            <div className="evolution-chart">
-              {evolution.map((m) => (
-                <div key={m.period} className="evolution-period">
-                  <h3>{m.period.split("-").reverse().join("/")}</h3>
-                  <ReportChart
-                    label={`Evolução ${m.period}`}
-                    scale={evolutionScale}
-                    money={money}
-                    hidden={hidden}
-                    rows={[
-                      { label: "Receitas", value: m.income },
-                      { label: "Despesas", value: m.expense, tone: "outflow" },
-                      { label: "Resultado", value: m.result, tone: "result" },
-                    ]}
-                  />
-                </div>
-              ))}
-            </div>
+            <MonthlyColumns
+              rows={evolution}
+              scale={evolutionScale}
+              money={money}
+              hidden={hidden}
+            />
             {evolution.length > 1 && (
               <small>Mesma escala nos meses selecionados.</small>
             )}
