@@ -13,6 +13,7 @@ import {
   waitFor,
   cleanup,
   within,
+  fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../src/App";
@@ -37,6 +38,143 @@ it("input bancário desloca centavos, apaga e aceita colagem brasileira", async 
 
 // New organization checks keep every existing financial assertion below.
 describe("experiência: relatórios, extrato e atualização", () => {
+  it("legenda identifica segmentos e comparação só inclui meses escolhidos", async () => {
+    const current = today(),
+      currentMonth = current.slice(0, 7);
+    const previousDate = new Date(
+      Number(current.slice(0, 4)),
+      Number(current.slice(5, 7)) - 2,
+      1,
+    );
+    const previous = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, "0")}`;
+    backend.rows.categories.push({
+      id: "leisure",
+      name: "Lazer",
+      type: "expense",
+    });
+    for (const [id, category, amount, date] of [
+      ["food", "c", 3000, current],
+      ["leisure", "leisure", 1000, current],
+      ["older", "c", 500, previous + "-01"],
+    ])
+      backend.rows.transactions.push({
+        id,
+        category_id: category,
+        amount_cents: amount,
+        transaction_date: date,
+        type: "expense",
+        status: "realized",
+        account_id: "a",
+        description: id,
+        created_at: "",
+      });
+    const user = await open(),
+      before = JSON.stringify(backend.rows);
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Relatórios",
+        exact: true,
+      }),
+    );
+    const legend = screen.getByRole("list", {
+      name: "Legenda dos gastos por categoria",
+    });
+    expect(within(legend).getByText("Alimentação")).toBeTruthy();
+    expect(within(legend).getByText("75,0%")).toBeTruthy();
+    expect(within(legend).getByText("25,0%")).toBeTruthy();
+    const circles = screen
+      .getByRole("img", { name: "Distribuição proporcional dos gastos" })
+      .querySelectorAll("circle");
+    within(legend)
+      .getAllByRole("listitem")
+      .forEach((item, index) => {
+        const color = document.createElement("span");
+        color.style.backgroundColor = circles[index].getAttribute("stroke")!;
+        expect(
+          (item.querySelector(".category-marker") as HTMLElement).style
+            .backgroundColor,
+        ).toBe(color.style.backgroundColor);
+        expect(circles[index].textContent).toContain(
+          item.querySelector(".category-name")?.textContent,
+        );
+      });
+    const evolution = screen
+      .getByRole("heading", { name: "Evolução mensal" })
+      .closest("section")!;
+    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(1);
+    const previousLabel = previous.split("-").reverse().join("/"),
+      currentLabel = currentMonth.split("-").reverse().join("/");
+    expect(
+      within(evolution).queryByRole("group", { name: `Evolução ${previous}` }),
+    ).toBeNull();
+    await user.click(
+      within(evolution).getByRole("button", { name: previousLabel }),
+    );
+    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(2);
+    const summary = screen.getByLabelText("Mês do resumo") as HTMLInputElement;
+    fireEvent.change(summary, { target: { value: previous } });
+    expect(evolution.querySelectorAll(".evolution-period")).toHaveLength(2);
+    await user.click(
+      within(evolution).getByRole("button", { name: previousLabel }),
+    );
+    expect(
+      within(evolution).queryByRole("group", { name: `Evolução ${previous}` }),
+    ).toBeNull();
+    await user.click(
+      within(evolution).getByRole("button", { name: currentLabel }),
+    );
+    expect(
+      within(evolution).getByText(/Selecione um ou mais meses/),
+    ).toBeTruthy();
+    expect(JSON.stringify(backend.rows)).toBe(before);
+    expect(backend.writes).toHaveLength(0);
+  });
+  it("Ajustes recolhe ações, categorias e ferramentas sem escrever dados", async () => {
+    const user = await open(),
+      before = JSON.stringify(backend.rows);
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Ajustes",
+        exact: true,
+      }),
+    );
+    document
+      .querySelectorAll<HTMLDetailsElement>(
+        ".settings-account,.settings-section",
+      )
+      .forEach((section) => expect(section.open).toBe(false));
+    expect(
+      screen.queryByText(/Revisar classificação/, { selector: "summary" }),
+    ).toBeTruthy();
+    const advanced = screen
+      .getByText("Ferramentas avançadas")
+      .closest("details")!;
+    expect(advanced.open).toBe(false);
+    await user.click(screen.getByText("Principal", { exact: true }));
+    const account = screen
+      .getByText("Principal", { exact: true })
+      .closest("details")!;
+    await user.click(
+      within(account).getByRole("button", { name: "Editar", exact: true }),
+    );
+    expect(screen.getByLabelText("Nome")).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    await user.click(screen.getByText("Categorias · 2"));
+    const categories = screen.getByText("Categorias · 2").closest("details")!;
+    await user.click(
+      within(categories).getByRole("button", { name: "+ Criar", exact: true }),
+    );
+    expect(screen.getByLabelText("Nome")).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Fechar", exact: true }),
+    );
+    await user.click(screen.getByText("Ferramentas avançadas"));
+    expect(advanced.open).toBe(true);
+    expect(JSON.stringify(backend.rows)).toBe(before);
+    expect(backend.writes).toHaveLength(0);
+  });
   it("relatórios usam o mesmo fechamento da Home e não escrevem dados", async () => {
     const user = await open();
     const closing = document.querySelector(".month-hero h2")?.textContent;
@@ -548,6 +686,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Ajustes", exact: true }),
     );
+    await user.click(screen.getByText("Principal", { exact: true }));
     await user.click(
       screen.getAllByRole("button", { name: "Arquivar", exact: true })[0],
     );
@@ -729,6 +868,7 @@ describe("disponível, reserva e privacidade", () => {
       expect(document.body.textContent).not.toMatch(/R\$/);
       expect(document.body.textContent).not.toMatch(/\d+%/);
     }
+    await user.click(screen.getByText("Principal", { exact: true }));
     await user.click(
       screen.getAllByRole("button", { name: "Editar", exact: true })[0],
     );

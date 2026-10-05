@@ -150,16 +150,35 @@ export function periodReport(
   };
 }
 
-export function monthlyEvolution(
+// Available periods are choices, not an assertion that their data is complete.
+export function reportMonths(
   data: FinanceData,
   plan: PlanningData,
-  period: string,
   asOf: string,
 ) {
-  const [year, month] = period.split("-").map(Number);
-  return Array.from({ length: 6 }, (_, i) => {
-    const date = new Date(year, month - 6 + i, 1);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return { period: key, ...periodReport(data, plan, key, asOf) };
-  }).filter((m) => m.income || m.expense);
+  const dates = [
+    asOf,
+    ...data.transactions.map((t) => t.transaction_date),
+    ...plan.card_purchases.map((p) => p.purchase_date),
+    ...(plan.card_adjustments ?? []).map((a) => a.due_date),
+  ];
+  return [
+    ...new Set(
+      dates.filter((date) => date <= asOf).map((date) => date.slice(0, 7)),
+    ),
+  ]
+    .sort()
+    .reverse();
+}
+export function selectedMonthReports(
+  data: FinanceData,
+  plan: PlanningData,
+  months: string[],
+  asOf: string,
+) {
+  const available = new Set(reportMonths(data, plan, asOf));
+  return [...new Set(months)]
+    .filter((month) => available.has(month))
+    .sort()
+    .map((period) => ({ period, ...periodReport(data, plan, period, asOf) }));
 }

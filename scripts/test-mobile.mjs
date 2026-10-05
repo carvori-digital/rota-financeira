@@ -50,7 +50,9 @@ const normalize = (rows) =>
       Object.entries(row).map(([key, value]) => [
         key,
         value instanceof Date
-          ? value.toISOString().slice(0, key === "date" || key.endsWith("_date") ? 10 : 24)
+          ? value
+              .toISOString()
+              .slice(0, key === "date" || key.endsWith("_date") ? 10 : 24)
           : key.endsWith("_cents") && value !== null
             ? Number(value)
             : value,
@@ -566,7 +568,12 @@ try {
   await page.getByText(/Parcela 8\/14/).waitFor();
   await nav("Ajustes").click();
   await page
-    .locator(".settings-row")
+    .locator(".settings-account")
+    .filter({ hasText: "Conta local" })
+    .locator("summary")
+    .click();
+  await page
+    .locator(".settings-account")
     .filter({ hasText: "Conta local" })
     .getByRole("button", { name: "Ajustar saldo atual", exact: true })
     .click();

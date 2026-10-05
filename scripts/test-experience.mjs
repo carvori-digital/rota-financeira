@@ -88,6 +88,37 @@ try {
     const projected = await page.locator(".month-hero h2").innerText();
     await nav("Relatórios").click();
     await fit(`${width}px Reports`);
+    assert.equal(await page.locator(".evolution-period").count(), 1);
+    const legendMatches = await page.evaluate(() => {
+      const markers = [...document.querySelectorAll(".category-marker")],
+        segments = [
+          ...document.querySelectorAll(".category-distribution circle"),
+        ];
+      return (
+        markers.length > 0 &&
+        markers.length === segments.length &&
+        markers.every(
+          (marker, i) =>
+            getComputedStyle(marker).backgroundColor ===
+            getComputedStyle(segments[i]).stroke,
+        )
+      );
+    });
+    assert.ok(legendMatches);
+    const monthToCompare = await page
+      .locator('.month-chips button[aria-pressed="false"]')
+      .first()
+      .innerText();
+    const unselected = page.getByRole("button", {
+      name: monthToCompare,
+      exact: true,
+    });
+    await unselected.click();
+    assert.equal(await page.locator(".evolution-period").count(), 2);
+    await fit(`${width}px selected month comparison`);
+    await capture(`${width}-comparison`);
+    await unselected.click();
+    assert.equal(await page.locator(".evolution-period").count(), 1);
     await capture(`${width}-reports`);
     for (const title of [
       "Fluxo do mês",
@@ -126,6 +157,22 @@ try {
       await fit(`${width}px Planning ${title}`);
     }
     await capture(`${width}-goals`);
+    await nav("Ajustes").click();
+    assert.equal(await page.locator(".settings-account[open]").count(), 0);
+    assert.equal(await page.locator(".settings-section[open]").count(), 0);
+    await fit(`${width}px compact settings`);
+    await capture(`${width}-settings`);
+    await page.locator(".settings-account summary").first().click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Ajustar saldo atual", exact: true })
+        .count(),
+      1,
+    );
+    await page.getByText(/^Categorias ·/).click();
+    await page.getByText("Ferramentas avançadas", { exact: true }).click();
+    await fit(`${width}px expanded settings`);
+    await capture(`${width}-settings-expanded`);
     await nav("Movimentos").click();
     await fit(`${width}px Movements`);
     assert.equal(await page.getByLabel("Mês", { exact: true }).count(), 0);

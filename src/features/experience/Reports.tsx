@@ -5,7 +5,8 @@ import type { Money } from "../planning/ui";
 import {
   experienceReport,
   periodReport,
-  monthlyEvolution,
+  reportMonths,
+  selectedMonthReports,
 } from "./calculations";
 import { today, displayDate } from "../../utils/finance";
 import { ReportChart } from "./ReportChart";
@@ -23,9 +24,11 @@ export function Reports({
 }) {
   const asOf = today(),
     [period, setPeriod] = useState(asOf.slice(0, 7));
+  const [comparisonMonths, setComparisonMonths] = useState([asOf.slice(0, 7)]);
   const r = experienceReport(data, plan, asOf),
     actual = periodReport(data, plan, period, asOf);
-  const evolution = monthlyEvolution(data, plan, period, asOf);
+  const availableMonths = reportMonths(data, plan, asOf);
+  const evolution = selectedMonthReports(data, plan, comparisonMonths, asOf);
   const evolutionScale = Math.max(
     1,
     ...evolution.flatMap((m) => [m.income, m.expense, Math.abs(m.result)]),
@@ -49,14 +52,21 @@ export function Reports({
           <p className="eyebrow">ENTENDA SUA ROTA</p>
           <h1>Relatórios</h1>
         </div>
-        <input
-          type="month"
-          aria-label="Mês do resumo"
-          value={period}
-          max={asOf.slice(0, 7)}
-          onChange={(e) => setPeriod(e.target.value || asOf.slice(0, 7))}
-        />
+        <label className="report-period">
+          Mês do resumo
+          <input
+            type="month"
+            aria-label="Mês do resumo"
+            value={period}
+            max={asOf.slice(0, 7)}
+            onChange={(e) => setPeriod(e.target.value || asOf.slice(0, 7))}
+          />
+        </label>
       </div>
+      <p className="muted report-period-hint">
+        O mês do resumo define o fluxo, os gastos por categoria e a taxa de
+        economia.
+      </p>
       <section className="panel">
         <div className="section-heading">
           <h2>Fluxo do mês</h2>
@@ -88,7 +98,7 @@ export function Reports({
       </section>
       <section className="panel">
         <h2>Gastos por categoria</h2>
-        <Donut rows={actual.categories} hidden={hidden} />
+        <Donut rows={actual.categories} hidden={hidden} money={money} />
         <ReportChart
           label="Despesas por categoria"
           hidden={hidden}
@@ -98,6 +108,31 @@ export function Reports({
       </section>
       <section className="panel">
         <h2>Evolução mensal</h2>
+        <p className="muted">
+          Compare somente os meses que escolher. Meses com lançamentos podem
+          estar incompletos.
+        </p>
+        <fieldset className="month-picker">
+          <legend>Meses da comparação</legend>
+          <div className="month-chips">
+            {availableMonths.map((month) => (
+              <button
+                key={month}
+                type="button"
+                aria-pressed={comparisonMonths.includes(month)}
+                onClick={() =>
+                  setComparisonMonths((current) =>
+                    current.includes(month)
+                      ? current.filter((m) => m !== month)
+                      : [...current, month],
+                  )
+                }
+              >
+                {month.split("-").reverse().join("/")}
+              </button>
+            ))}
+          </div>
+        </fieldset>
         <Trend
           rows={evolution.map((m) => ({
             label: m.period.slice(5) + "/" + m.period.slice(2, 4),
@@ -106,7 +141,7 @@ export function Reports({
           hidden={hidden}
           label="Evolução do resultado mensal"
         />
-        {evolution.length > 1 ? (
+        {evolution.length > 0 ? (
           <>
             <div className="chart-legend">
               <span>Receitas</span>
@@ -131,12 +166,13 @@ export function Reports({
                 </div>
               ))}
             </div>
-            <small>Mesma escala em todos os meses com movimentos.</small>
+            {evolution.length > 1 && (
+              <small>Mesma escala nos meses selecionados.</small>
+            )}
           </>
         ) : (
           <p className="empty">
-            Com movimentos em dois meses, sua evolução aparece aqui. O mês atual
-            já está no fluxo acima.
+            Selecione um ou mais meses para visualizar a comparação.
           </p>
         )}
       </section>

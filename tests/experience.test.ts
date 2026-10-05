@@ -7,7 +7,8 @@ import { monthReport } from "../src/features/planning/reportCalculations.ts";
 import {
   experienceReport,
   periodReport,
-  monthlyEvolution,
+  reportMonths,
+  selectedMonthReports,
 } from "../src/features/experience/calculations.ts";
 const base = { user_id: "local", created_at: "2026-10-01T00:00:00Z" };
 const tx = (
@@ -94,10 +95,10 @@ test("categorias incluem consumo sem categoria e cartão uma vez, excluindo paga
   );
   assert.equal(r.saved, 68);
 });
-test("evolução não inventa meses e taxa fica indefinida sem renda", () => {
+test("comparação inclui somente meses escolhidos e usa os relatórios existentes", () => {
   const data = fixture();
   assert.equal(
-    monthlyEvolution(data, emptyPlanning, "2026-10", "2026-10-02").length,
+    selectedMonthReports(data, emptyPlanning, ["2026-10"], "2026-10-02").length,
     1,
   );
   assert.equal(
@@ -105,9 +106,33 @@ test("evolução não inventa meses e taxa fica indefinida sem renda", () => {
     null,
   );
   data.transactions.push(tx("old", "expense", 20000, "realized", "2026-09-12"));
+  assert.deepEqual(reportMonths(data, emptyPlanning, "2026-10-02"), [
+    "2026-10",
+    "2026-09",
+  ]);
+  assert.deepEqual(
+    selectedMonthReports(data, emptyPlanning, ["2026-10"], "2026-10-02").map(
+      (m) => m.period,
+    ),
+    ["2026-10"],
+  );
+  const selected = selectedMonthReports(
+    data,
+    emptyPlanning,
+    ["2026-10", "2026-09", "2026-10", "2026-11"],
+    "2026-10-02",
+  );
+  assert.deepEqual(
+    selected.map((m) => m.period),
+    ["2026-09", "2026-10"],
+  );
   assert.equal(
-    monthlyEvolution(data, emptyPlanning, "2026-10", "2026-10-02").length,
-    2,
+    selected[0].expense,
+    periodReport(data, emptyPlanning, "2026-09", "2026-10-02").expense,
+  );
+  assert.deepEqual(
+    selectedMonthReports(data, emptyPlanning, [], "2026-10-02"),
+    [],
   );
 });
 test("proteção usa saldo das contas selecionadas e atualiza após novos registros", () => {

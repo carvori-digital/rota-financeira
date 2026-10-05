@@ -21,7 +21,12 @@ import { QuickSetup } from "./features/planning/QuickSetup";
 import { invoices } from "./features/cards/calculations";
 import { rpc } from "./features/planning/queries";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
-import { money as formatMoney, parseMoney, today } from "./utils/finance";
+import {
+  balance,
+  money as formatMoney,
+  parseMoney,
+  today,
+} from "./utils/finance";
 type Editor =
   | { kind: "account"; row?: Account }
   | { kind: "category"; row?: Category }
@@ -400,11 +405,6 @@ export default function App() {
             {page === "settings" && (
               <>
                 <h1>Ajustes</h1>
-                <ClassificationReviews
-                  data={data}
-                  plan={planning.data}
-                  onSaved={refresh}
-                />
                 <button onClick={() => setSetup(true)}>
                   Configuração rápida
                 </button>
@@ -418,14 +418,19 @@ export default function App() {
                 {data.accounts
                   .filter((a) => !a.investment_id)
                   .map((a) => (
-                    <div className="settings-row" key={a.id}>
-                      <div>
-                        <strong>{a.name}</strong>
-                        <small>
-                          {accountTypes[a.type]} ·{" "}
-                          {a.is_active ? "Ativa" : "Arquivada"}
-                        </small>
-                      </div>
+                    <details className="settings-account" key={a.id}>
+                      <summary>
+                        <span className="settings-account-name">
+                          <strong>{a.name}</strong>
+                          <small>
+                            {accountTypes[a.type]} ·{" "}
+                            {a.is_active ? "Ativa" : "Arquivada"}
+                          </small>
+                        </span>
+                        <strong className="settings-account-balance">
+                          {money(balance(a, data.transactions))}
+                        </strong>
+                      </summary>
                       <div className="actions">
                         <button
                           onClick={() => setEditor({ kind: "account", row: a })}
@@ -448,27 +453,38 @@ export default function App() {
                           {a.is_active ? "Arquivar" : "Reativar"}
                         </button>
                       </div>
-                    </div>
+                    </details>
                   ))}
-                <div className="section-heading">
-                  <h2>Categorias</h2>
-                  <button onClick={() => setEditor({ kind: "category" })}>
-                    + Criar
-                  </button>
-                </div>
-                {data.categories.map((c) => (
-                  <div className="settings-row" key={c.id}>
-                    <div>
-                      <strong>{c.name}</strong>
-                      <small>{labels[c.type]}</small>
-                    </div>
-                    <button
-                      onClick={() => setEditor({ kind: "category", row: c })}
-                    >
-                      Editar
+                <details className="settings-section">
+                  <summary>Categorias · {data.categories.length}</summary>
+                  <div className="section-heading">
+                    <h2>Categorias</h2>
+                    <button onClick={() => setEditor({ kind: "category" })}>
+                      + Criar
                     </button>
                   </div>
-                ))}
+                  {data.categories.map((c) => (
+                    <div className="settings-row" key={c.id}>
+                      <div>
+                        <strong>{c.name}</strong>
+                        <small>{labels[c.type]}</small>
+                      </div>
+                      <button
+                        onClick={() => setEditor({ kind: "category", row: c })}
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  ))}
+                </details>
+                <details className="settings-section">
+                  <summary>Ferramentas avançadas</summary>
+                  <ClassificationReviews
+                    data={data}
+                    plan={planning.data}
+                    onSaved={refresh}
+                  />
+                </details>
                 <div className="panel">
                   <h3>No iPhone</h3>
                   <p>

@@ -389,6 +389,136 @@ progress::-webkit-progress-value {
   font-size: 12px;
   padding: 9px;
 }
+.report-period {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  color: #6c8068;
+}
+.report-period-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.category-legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.category-legend li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+.category-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.category-name {
+  overflow-wrap: anywhere;
+}
+.category-amount {
+  display: grid;
+  text-align: right;
+  gap: 3px;
+}
+.category-amount small {
+  color: #6c8068;
+}
+.month-picker {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.month-picker legend {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.month-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.month-chips button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #dce3d7;
+  border-radius: 22px;
+  font-size: 12px;
+}
+.month-chips button[aria-pressed="true"] {
+  background: #294e3b;
+  color: white;
+  border-color: #294e3b;
+}
+.settings-account {
+  border-bottom: 1px solid #e4e9df;
+  padding: 4px 0;
+}
+.settings-account > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+.settings-account > summary::-webkit-details-marker {
+  display: none;
+}
+.settings-account > summary::after {
+  content: "+";
+  font-size: 20px;
+  color: #6c8068;
+}
+.settings-account[open] > summary::after {
+  content: "−";
+}
+.settings-account-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.settings-account-name small {
+  color: #6c8068;
+  font-size: 11px;
+}
+.settings-account-balance {
+  font-size: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  max-width: 40%;
+}
+.settings-account > .actions {
+  padding: 4px 0 12px;
+  flex-wrap: wrap;
+}
+.settings-section {
+  margin: 18px 0;
+  border-top: 1px solid #e4e9df;
+}
+.settings-section > summary {
+  min-height: 48px;
+  padding: 14px 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+.settings-section > .section-heading {
+  margin-top: 12px;
+}
+.settings-account > summary:focus-visible,
+.settings-section > summary:focus-visible {
+  outline: 2px solid #65764e;
+  outline-offset: 3px;
+}
 .reports details {
   font-size: 12px;
   margin-top: 18px;
