@@ -291,6 +291,7 @@ export default function App() {
       onContribution={(goal) => setEditor({ kind: "contribution", goal })}
       onArchive={(g) => void archive("goals", g.id, g.is_active)}
       onRemove={(id) => void remove("goal_contributions", id)}
+      onSaved={refresh}
     />
   );
   return (

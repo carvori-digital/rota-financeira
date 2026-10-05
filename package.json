@@ -11,7 +11,7 @@
     "test": "npm run test:unit && npm run test:db && npm run test:ui",
     "test:isolation": "node scripts/test-isolation.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 42817 --strictPort",
-    "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs tests/consolidation-database.test.mjs",
+    "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs tests/consolidation-database.test.mjs tests/record-management.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts",
     "format": "prettier --write .",
     "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts tests/consolidation.test.ts",
@@ -20,7 +20,9 @@
     "validate:remote-data": "node scripts/remote-baseline.mjs",
     "validate:experience-data": "node scripts/experience-data-audit.mjs",
     "preview:experience": "node scripts/experience-preview.mjs",
-    "test:experience": "node scripts/test-experience.mjs"
+    "test:experience": "node scripts/test-experience.mjs",
+    "snapshot:records": "node --experimental-strip-types scripts/snapshot-consolidation.mjs",
+    "audit:records": "node scripts/record-management-audit.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",

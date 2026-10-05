@@ -20,6 +20,45 @@ import App from "../src/App";
 import { act } from "react";
 import { today } from "../src/utils/finance";
 import { MoneyInput } from "../src/components/MoneyInput";
+import { DeleteRecord } from "../src/features/planning/DeleteRecord";
+
+it("exclusão pede confirmação, usa operação específica e respeita impedimentos", async () => {
+  const user = userEvent.setup(),
+    saved = vi.fn(async () => {});
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    const view = render(
+      <DeleteRecord id="manual" kind="investment" onSaved={saved} />,
+    );
+    await user.click(screen.getByText("Ações do registro"));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+    expect(backend.writes).toHaveLength(0);
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+    expect(backend.writes).toContainEqual({
+      rpc: "delete_investment",
+      p_id: "manual",
+    });
+    expect(saved).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <DeleteRecord
+        id="migrated"
+        kind="investment"
+        onSaved={saved}
+        blocked="Investimento migrado: histórico preservado."
+      />,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Excluir" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Investimento migrado: histórico preservado."),
+    ).toBeTruthy();
+  } finally {
+    confirm.mockRestore();
+  }
+});
 
 it("input bancário desloca centavos, apaga e aceita colagem brasileira", async () => {
   const user = userEvent.setup();

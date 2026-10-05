@@ -19,6 +19,7 @@ import { projection } from "./calculations";
 import { experienceReport } from "../experience/calculations";
 import { MonthReport } from "./MonthReport";
 import { ProjectionList } from "./ProjectionList";
+import { DeleteRecord } from "./DeleteRecord";
 export type PlanningAction = {
   kind:
     | "installment"
@@ -267,20 +268,7 @@ export function PlanningWorkspace(props: Props) {
                 onAdjustPurchase={(purchase) =>
                   setAction({ kind: "purchaseAdjustment", purchase })
                 }
-                onCancelPurchase={(purchase) => {
-                  if (
-                    window.confirm(
-                      "Cancelar esta compra e suas parcelas? O registro permanecerá no histórico.",
-                    )
-                  )
-                    void run(() =>
-                      rpc("correct_card_purchase", {
-                        p_id: purchase.id,
-                        p_payload: {},
-                        p_cancel: true,
-                      }),
-                    );
-                }}
+                onSaved={onSaved}
                 onInvoice={(card) => setAction({ kind: "invoice", card })}
                 onPay={(card, invoice) =>
                   setAction({ kind: "cardPayment", card, invoice })
@@ -294,6 +282,7 @@ export function PlanningWorkspace(props: Props) {
             )}
             {section === "debts" && (
               <DebtsPanel
+                onSaved={onSaved}
                 plan={plan}
                 money={money}
                 hidden={hidden}
@@ -310,6 +299,7 @@ export function PlanningWorkspace(props: Props) {
             {section === "recurring" && (
               <>
                 <RecurringPanel
+                  onSaved={onSaved}
                   plan={plan}
                   transactions={data.transactions}
                   money={money}
@@ -451,6 +441,14 @@ export function PlanningWorkspace(props: Props) {
                     emergência e contas antigas selecionadas. Metas não
                     movimentam dinheiro.
                   </small>
+                  {reserveGoal && (
+                    <DeleteRecord
+                      kind="goal"
+                      id={reserveGoal.id}
+                      onSaved={onSaved}
+                      explanation="A configuração e os aportes desta meta de reserva serão removidos. Contas, transações e investimentos serão preservados."
+                    />
+                  )}
                 </article>
                 {!!reserveAccounts.length && (
                   <h3>Contas antigas aguardando migração</h3>

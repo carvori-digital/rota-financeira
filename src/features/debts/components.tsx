@@ -1,4 +1,5 @@
 import type { Debt } from "./types";
+import { DeleteRecord } from "../planning/DeleteRecord";
 import type { PlanningData } from "../planning/types";
 import type { Money } from "../planning/ui";
 import { debtProgress, debtInstallments, debtSchedule } from "./calculations";
@@ -12,6 +13,7 @@ export function DebtsPanel({
   onInstallment,
   onPay,
   onToggle,
+  onSaved,
 }: {
   plan: PlanningData;
   money: Money;
@@ -20,6 +22,7 @@ export function DebtsPanel({
   onEdit: (d?: Debt) => void;
   onPay: (d?: Debt) => void;
   onToggle: (d: Debt) => void;
+  onSaved: () => Promise<void>;
 }) {
   return (
     <>
@@ -120,6 +123,16 @@ export function DebtsPanel({
                   </div>
                 ))}
             </details>
+            <DeleteRecord
+              kind="debt"
+              id={d.id}
+              onSaved={onSaved}
+              blocked={
+                plan.debt_payments.some((p) => p.debt_id === d.id)
+                  ? "Esta dívida possui pagamentos e não pode ser excluída."
+                  : undefined
+              }
+            />
           </article>
         );
       })}

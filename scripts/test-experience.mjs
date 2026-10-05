@@ -156,6 +156,12 @@ try {
     ]) {
       await page.getByRole("tab", { name: title, exact: true }).click();
       await fit(`${width}px Planning ${title}`);
+      for (const actions of await page
+        .getByText("Ações do registro", { exact: true })
+        .all()) {
+        if (await actions.isVisible()) await actions.click();
+      }
+      await fit(`${width}px record actions ${title}`);
     }
     await capture(`${width}-goals`);
     await nav("Ajustes").click();

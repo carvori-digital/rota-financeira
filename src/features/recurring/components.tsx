@@ -1,4 +1,5 @@
 import type { Transaction } from "../../types";
+import { DeleteRecord } from "../planning/DeleteRecord";
 import type { PlanningData } from "../planning/types";
 import type { Money } from "../planning/ui";
 import { Status } from "../planning/ui";
@@ -13,6 +14,7 @@ export function RecurringPanel({
   onEdit,
   onResolve,
   onToggle,
+  onSaved,
 }: {
   plan: PlanningData;
   transactions: Transaction[];
@@ -20,6 +22,7 @@ export function RecurringPanel({
   onEdit: (r?: RecurringItem) => void;
   onResolve: (r: RecurringItem, date: string, skip: boolean) => void;
   onToggle: (r: RecurringItem) => void;
+  onSaved: () => Promise<void>;
 }) {
   const now = today();
   return (
@@ -105,6 +108,18 @@ export function RecurringPanel({
                 </div>
               ))}
           </details>
+          <DeleteRecord
+            kind="recurring"
+            id={r.id}
+            onSaved={onSaved}
+            blocked={
+              plan.recurring_occurrences.some(
+                (o) => o.recurring_item_id === r.id,
+              )
+                ? "Esta recorrência possui ocorrências. Pause para preservar o histórico."
+                : undefined
+            }
+          />
         </article>
       ))}
     </>
