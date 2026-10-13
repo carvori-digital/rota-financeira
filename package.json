@@ -14,7 +14,7 @@
     "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs tests/consolidation-database.test.mjs tests/record-management.test.mjs tests/sprint03-database.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts",
     "format": "prettier --write .",
-    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts tests/consolidation.test.ts tests/commitments.test.ts tests/cdi.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts tests/consolidation.test.ts tests/commitments.test.ts tests/cdi.test.ts tests/export.test.ts",
     "test:live": "node --experimental-strip-types scripts/test-live.mjs",
     "test:mobile": "node scripts/test-mobile.mjs",
     "validate:remote-data": "node scripts/remote-baseline.mjs",
@@ -22,10 +22,12 @@
     "preview:experience": "node scripts/experience-preview.mjs",
     "test:experience": "node scripts/test-experience.mjs",
     "snapshot:records": "node --experimental-strip-types scripts/snapshot-consolidation.mjs",
-    "audit:records": "node scripts/record-management-audit.mjs"
+    "audit:records": "node scripts/record-management-audit.mjs",
+    "test:sprint03-mobile": "node scripts/test-sprint03-mobile.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.50.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
@@ -43,6 +45,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.3.0",
     "jsdom": "^29.1.1",
+    "playwright": "^1.64.0",
     "prettier": "^3.9.9",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.42.0",

@@ -291,6 +291,42 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
         );
       },
     );
+    await t.test(
+      "export complete arrays beyond row limits, month confirmation and snapshot owner",
+      async () => {
+        await q(
+          "insert into transactions(account_id,category_id,type,amount_cents,transaction_date) select $1,(select id from categories where type='income' limit 1),'income',1,'2026-09-01' from generate_series(1,1100)",
+          [cash.id],
+        );
+        const count = (
+          await q("select count(*)::integer n from transactions")
+        )[0].n;
+        let snapshot = (await q("select export_financial_snapshot() value"))[0]
+          .value;
+        assert.equal(snapshot.owner, a);
+        assert.equal(snapshot.data.transactions.length, count);
+        assert.equal(snapshot.counts.transactions, count);
+        assert.ok(count > 1000);
+        assert.equal(snapshot.data.report_month_confirmations.length, 0);
+        await q("select confirm_report_month('2026-09-01',true)");
+        snapshot = (await q("select export_financial_snapshot() value"))[0]
+          .value;
+        assert.equal(
+          snapshot.data.report_month_confirmations[0].complete,
+          true,
+        );
+        await q("select confirm_report_month('2026-09-01',false)");
+        await assert.rejects(
+          q("select confirm_report_month('2026-10-01',true)"),
+        );
+        await as(b);
+        const other = (await q("select export_financial_snapshot() value"))[0]
+          .value;
+        assert.equal(other.data.transactions.length, 0);
+        assert.equal(other.data.investments.length, 0);
+        await as(a);
+      },
+    );
     await t.test("A/B isolation and protected functions", async () => {
       await as(b);
       for (const table of [

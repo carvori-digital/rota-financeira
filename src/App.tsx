@@ -390,6 +390,7 @@ export default function App() {
             )}
             {page === "reports" && (
               <Reports
+                owner={session!.user.id}
                 data={data}
                 plan={planning.data}
                 money={money}
