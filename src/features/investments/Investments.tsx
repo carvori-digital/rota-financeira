@@ -6,6 +6,7 @@ import { Field, Amount, Modal, cents, text } from "../planning/ui";
 import type { Money } from "../planning/ui";
 import { rpc, save } from "../planning/queries";
 import { today, displayDate } from "../../utils/finance";
+import { ReconstructInvestment } from "./ReconstructInvestment";
 import { updateCdi } from "./cdiHistory";
 import { investmentValue } from "./calculations";
 import { DeleteRecord } from "../planning/DeleteRecord";
@@ -27,6 +28,7 @@ export function Investments({
   onSaved: () => Promise<void>;
 }) {
   const [action, setAction] = useState<Action | null>(null);
+  const [rebuilding, setRebuilding] = useState<Investment | null>(null);
   const [cdiMessage, setCdiMessage] = useState("");
   const [updating, setUpdating] = useState(false);
   return (
@@ -203,6 +205,11 @@ export function Investments({
                       ))}
                   </>
                 )}
+                {i.source_account_id && i.active && (
+                  <button onClick={() => setRebuilding(i)}>
+                    Reconstruir investimento
+                  </button>
+                )}
                 {i.source_account_id && (
                   <p className="muted">
                     Importado de conta antiga; histórico e origem preservados.
@@ -248,6 +255,19 @@ export function Investments({
             </article>
           );
         })}
+      {rebuilding && (
+        <ReconstructInvestment
+          investment={rebuilding}
+          plan={plan}
+          money={money}
+          hidden={hidden}
+          onClose={() => setRebuilding(null)}
+          onSaved={async () => {
+            await onSaved();
+            setRebuilding(null);
+          }}
+        />
+      )}
       {action && (
         <InvestmentEditor
           key={action.kind + action.investment?.id}

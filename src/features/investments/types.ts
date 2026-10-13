@@ -38,3 +38,13 @@ export interface InvestmentRate extends Base {
   effective_date: string;
   percent: number;
 }
+
+export interface InvestmentReconstruction extends Base {
+  old_investment_id: string;
+  new_investment_id: string;
+  recorded_value_cents: number;
+  historical_net_cents: number;
+  real_value_cents: number;
+  difference_cents: number;
+  reconciliation_note: string;
+}

@@ -19,6 +19,7 @@ export interface ReserveLink extends Base {
   account_id: string;
 }
 export interface PlanningData {
+  investment_reconstructions?: import("../investments/types.ts").InvestmentReconstruction[];
   investment_rates?: InvestmentRate[];
   cdi_history?: import("../investments/cdi.ts").CdiHistory | null;
   investments?: Investment[];
@@ -36,6 +37,7 @@ export interface PlanningData {
   reserve_account_links: ReserveLink[];
 }
 export const emptyPlanning: PlanningData = {
+  investment_reconstructions: [],
   investment_rates: [],
   investments: [],
   investment_movements: [],

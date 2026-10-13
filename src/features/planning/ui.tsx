@@ -102,7 +102,7 @@ export function Modal({
   title: string;
   children: ReactNode;
   onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>;
+  onSubmit: (form: FormData) => Promise<void | boolean>;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,8 +130,9 @@ export function Modal({
     setBusy(true);
     setError("");
     try {
-      await onSubmit(new FormData(e.currentTarget));
-      close();
+      const result = await onSubmit(new FormData(e.currentTarget));
+      if (result === false) setBusy(false);
+      else close();
     } catch (err) {
       setError(
         (err as { message?: string }).message ??
