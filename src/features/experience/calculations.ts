@@ -14,48 +14,10 @@ export function experienceReport(
   asOf: string,
 ) {
   const report = monthReport(data, plan, asOf);
-  const pending = report.current.items.filter((c) => c.impact < 0);
-  const bills = invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
-    plan.card_payments.filter((p) => p.payment_date <= asOf),
-    plan.card_adjustments,
-  );
-  const completedKeys = new Set<string>();
-  for (const transaction of report.paidItems) {
-    const cardPayment = plan.card_payments.find(
-      (p) => p.transaction_id === transaction.id,
-    );
-    const debtPayment = plan.debt_payments.find(
-      (p) => p.transaction_id === transaction.id,
-    );
-    if (cardPayment) {
-      const bill = bills.find(
-        (i) =>
-          i.card_id === cardPayment.card_id &&
-          i.month === cardPayment.due_month,
-      );
-      if (bill && bill.pending === 0)
-        completedKeys.add(`card:${bill.card_id}:${bill.month}`);
-    } else if (debtPayment) {
-      const debt = plan.debts.find((d) => d.id === debtPayment.debt_id);
-      if (
-        debt &&
-        (debt.remaining_amount_cents === 0 ||
-          (debtPayment.scheduled_date &&
-            debt.next_due_date &&
-            debt.next_due_date > debtPayment.scheduled_date))
-      ) {
-        completedKeys.add(
-          `debt:${debt.id}:${debtPayment.scheduled_date ?? "balance"}`,
-        );
-      }
-    } else {
-      completedKeys.add(`transaction:${transaction.id}`);
-    }
-  }
-  const completed = completedKeys.size;
+  const pending = report.obligations.filter((c) => c.status === "pending");
+  const completed = report.obligations.filter(
+    (c) => c.status === "completed",
+  ).length;
   const reserveGoal = data.goals.find((g) => g.is_emergency_reserve);
   const cost =
     reserveGoal?.essential_monthly_cents ??

@@ -67,6 +67,8 @@ export function FinancialActions({
               transaction_date: text(f, "date"),
               ...(t ? {} : { status: "pending" }),
               planning_group: text(f, "group"),
+              financial_commitment: type === "expense",
+              commitment_due_date: text(f, "date"),
             },
             !!t,
           );
