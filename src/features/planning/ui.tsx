@@ -98,11 +98,13 @@ export function Modal({
   children,
   onClose,
   onSubmit,
+  submitLabel = "Salvar",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   onSubmit: (form: FormData) => Promise<void | boolean>;
+  submitLabel?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +169,7 @@ export function Modal({
           {children}
           {error && <p role="alert">{error}</p>}
           <button type="submit" className="primary">
-            {busy ? "Salvando…" : "Salvar"}
+            {busy ? "Salvando…" : submitLabel}
           </button>
         </fieldset>
       </form>

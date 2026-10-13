@@ -98,7 +98,10 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
     .reduce((n, t) => n + t.amount_cents, 0);
   const scheduled = realizedExpenses
     .filter(
-      (t) => !recurringIds.has(t.id) && scheduledIds.has(t.id) && !isDebt(t.id),
+      (t) =>
+        !recurringIds.has(t.id) &&
+        (scheduledIds.has(t.id) || t.financial_commitment === true) &&
+        !isDebt(t.id),
     )
     .reduce((n, t) => n + t.amount_cents, 0);
   const debtExpense = realizedExpenses

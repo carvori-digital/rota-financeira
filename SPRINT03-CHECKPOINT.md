@@ -18,3 +18,13 @@ Checkpoint 4: exportação PDF/CSV/JSON e prévia prontas; snapshot consistente 
 Revisão identificou e corrigiu ordenação de sincronizações/aportes no mesmo dia: migration 009 adiciona `ledger_order` imutável por identity (somente metadado novo; nenhuma informação financeira anterior alterada). Teste de regressão adicionado. Ensaio estrutural compara todos os campos preexistentes antes/depois.
 
 Próximos passos: concluir validação geral após ajustes visuais, handoff, revisão final e push apenas da branch.
+
+## Entrega concluída
+
+Todas as frentes do Sprint 03 implementadas em código. Validação final: `npm test`, typecheck, lint e build aprovados; mobile 77 + 21 verificações em 375/390/430px. Revisão de diff sem whitespace inválido; 47 arquivos modificados/novos verificados por padrões de secrets, sem achados. Migrations 001–007 intactas. `origin/main` reconfirmada em c60c514 antes da entrega.
+
+Handoff: `SPRINT03-HANDOFF-LOCAL.md`. Fontes/fórmula/limites: `SPRINT03-CDI-RESEARCH.md`. Migration remota, escrita financeira real, reconstrução real, reset, merge e publicação: NÃO executados. Push autorizado somente da branch `feat/rota-sprint03-financial-clarity` após commit final; conferir SHA local/remoto ao retomar.
+
+Pendências locais: Supabase/PostgREST real, CORS/SGS no navegador, contrato/extrato Nubank, backup fresco/invariantes/RLS, implantação e celular físico. Sem valor líquido fiscal preciso; limitações e conservadorismo histórico documentados. Build com aviso não bloqueante de chunk principal >500kB. Não iniciar outro sprint.
+
+Envio: o Git do Cloud retornou 403 por autenticação como yuri-vitt. Conexão GitHub carvori-digital validada com permissão de escrita; envio da cadeia de cinco checkpoints via conector, preservando árvores de código. Hashes remotos estão no handoff; originais guardados na branch local archive/rota-sprint03-cloud-original. Nenhuma ação na main ou no banco.

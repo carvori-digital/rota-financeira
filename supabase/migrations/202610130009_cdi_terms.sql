@@ -3,6 +3,7 @@ alter table public.investments drop constraint investments_yield_type_check;
 alter table public.investments add constraint investments_yield_type_check check(yield_type in ('manual','fixed_annual','fixed_monthly','percent_cdi'));
 alter table public.investments drop constraint investments_yield_rate_check;
 alter table public.investments add constraint investments_yield_rate_check check(yield_rate>=0 and yield_rate<=case when yield_type='percent_cdi' then 1000 else 100 end);
+alter table public.investment_movements add column ledger_order bigint generated always as identity;
 alter table public.investment_movements add column sync_value_cents bigint check(sync_value_cents between 0 and 1000000000000);
 alter table public.investment_movements add column accounting_kind text check(accounting_kind in ('real_cash','historical_position','valuation'));
 create table public.investment_rates (
@@ -36,9 +37,9 @@ create function public.investment_value(p_investment uuid,p_date date) returns b
 declare i public.investments; anchor public.investment_movements; value numeric;begin
  select * into i from public.investments where id=p_investment and user_id=auth.uid();if not found then raise exception 'Investimento inválido';end if;
  if i.yield_type<>'percent_cdi' then return public.investment_value_fixed(p_investment,p_date);end if;
- select * into anchor from public.investment_movements where investment_id=i.id and user_id=i.user_id and date<=p_date and sync_value_cents is not null order by date desc,created_at desc,id desc limit 1;
+ select * into anchor from public.investment_movements where investment_id=i.id and user_id=i.user_id and date<=p_date and sync_value_cents is not null order by date desc,ledger_order desc limit 1;
  select coalesce(anchor.sync_value_cents,0)+coalesce(sum(case when type='withdrawal' then -amount_cents else amount_cents end),0) into value
-  from public.investment_movements where investment_id=i.id and user_id=i.user_id and date<=p_date and (anchor.id is null or (date,created_at,id)>(anchor.date,anchor.created_at,anchor.id));
+  from public.investment_movements where investment_id=i.id and user_id=i.user_id and date<=p_date and (anchor.id is null or (date,ledger_order)>(anchor.date,anchor.ledger_order));
  if abs(value)>1000000000000 then raise exception 'Posição fora do limite';end if;return round(value)::bigint;
 end $$;
 alter function public.record_investment_movement(uuid,uuid,text,bigint,date,uuid,text) rename to record_investment_movement_legacy;

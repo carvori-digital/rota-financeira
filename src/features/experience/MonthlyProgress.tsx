@@ -79,7 +79,9 @@ export function MonthlyProgress({
                 : "Renda do mês registrada"}
             </li>
           )}
-          {r.groups.find((g) => g.key === "cards")!.items.length > 0 && (
+          {r.groups
+            .find((g) => g.key === "cards")!
+            .items.some((c) => c.status === "pending") && (
             <li>
               <Check size={16} className="unchecked" />
               Faturas aguardando pagamento

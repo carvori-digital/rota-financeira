@@ -4,7 +4,6 @@ import { monthReport } from "../planning/reportCalculations.ts";
 import { realized } from "../planning/calculations.ts";
 import { balance, isReserveAccount, isRealized } from "../../utils/finance.ts";
 import { essentialMonthly } from "../recurring/calculations.ts";
-import { invoices } from "../cards/calculations.ts";
 import { wealthSummary } from "../investments/calculations.ts";
 
 // Presentation models only: money and projections keep their existing source.

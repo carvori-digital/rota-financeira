@@ -51,6 +51,7 @@ test("variable, income, transfers and investment adjustments do not count", () =
     tx("income", "income"),
     tx("transfer", "transfer"),
     tx("investment", "adjustment"),
+    tx("unlinked-card", "card_payment", "pending"),
   ];
   assert.deepEqual(monthlyCommitments(data, plan, "2026-10-10"), []);
 });
@@ -137,7 +138,7 @@ test("debt historical payments require captured obligation; partial payments sta
       obligation_amount_cents: 1000,
     },
   ];
-  let r = monthlyCommitments(data, plan, "2026-10-10");
+  const r = monthlyCommitments(data, plan, "2026-10-10");
   assert.equal(r.length, 1);
   assert.equal(r[0].status, "pending");
   plan.debts[0].remaining_amount_cents = 0;

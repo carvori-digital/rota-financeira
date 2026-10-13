@@ -104,3 +104,19 @@ test("SGS malformed dates, duplicates and annual-rate confusion are rejected", (
   ])
     assert.throws(() => parseSgs12(values, "2026-10-01", "2026-10-06", "now"));
 });
+
+test("same-day reconstruction and synchronization use immutable ledger order", () => {
+  const rows = [
+    { ...m("zzz", "2026-10-05", 100000), ledger_order: 1 },
+    {
+      ...m("aaa", "2026-10-05", 2000, "adjustment"),
+      sync_value_cents: 102000,
+      ledger_order: 2,
+    },
+    { ...m("bbb", "2026-10-05", 10000), ledger_order: 3 },
+  ];
+  assert.equal(
+    cdiPosition(rows, "2026-10-06", 115, [], h).current,
+    Math.round(112000 * 1.000575),
+  );
+});

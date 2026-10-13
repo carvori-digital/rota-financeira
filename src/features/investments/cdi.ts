@@ -67,7 +67,9 @@ export function cdiPosition(
     .sort(
       (a, b) =>
         a.date.localeCompare(b.date) ||
-        a.created_at.localeCompare(b.created_at) ||
+        (a.ledger_order != null && b.ledger_order != null
+          ? a.ledger_order - b.ledger_order
+          : a.created_at.localeCompare(b.created_at)) ||
         a.id.localeCompare(b.id),
     );
   const latestSync = rows.filter((m) => m.sync_value_cents != null).at(-1);

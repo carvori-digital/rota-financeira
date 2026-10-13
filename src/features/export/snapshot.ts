@@ -72,8 +72,10 @@ export function validateSnapshot(
     if (
       !Array.isArray(rows) ||
       r.counts[table] !== rows.length ||
-      new Set(rows.map((row) => row.id)).size !== rows.length ||
-      rows.some((row) => !row || row.user_id !== owner)
+      rows.some(
+        (row) => !row || typeof row.id !== "string" || row.user_id !== owner,
+      ) ||
+      new Set(rows.map((row) => row.id)).size !== rows.length
     )
       throw new Error(
         "Dados incompletos ou de outro usuário; exportação bloqueada",

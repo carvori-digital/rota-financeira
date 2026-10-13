@@ -85,6 +85,7 @@ export function ReconstructInvestment({
   return (
     <Modal
       title="Reconstruir investimento"
+      submitLabel={review ? "Confirmar reconstrução" : "Preparar reconciliação"}
       onClose={onClose}
       onSubmit={async (f) => {
         if (!review) {
@@ -133,7 +134,7 @@ export function ReconstructInvestment({
             transações bancárias permanecerão protegidos. O investimento antigo
             sai dos totais.
           </p>
-          <dl className="finance-details">
+          <dl className="finance-details reconstruction-values">
             <div>
               <dt>Posição antiga registrada</dt>
               <dd>{money(old.current)}</dd>
@@ -161,7 +162,7 @@ export function ReconstructInvestment({
             não são reconstruídos com precisão. Confirme o saldo e as datas no
             extrato.
           </p>
-          <label className="check">
+          <label className="check reconstruction-confirm">
             <input name="confirm" type="checkbox" required />
             Revisei as diferenças e confirmo que estes aportes/resgates já foram
             contabilizados; não são dinheiro novo.
@@ -231,6 +232,7 @@ export function ReconstructInvestment({
           <Field label="Aportes e resgates históricos">
             <textarea
               name="history"
+              className="reconstruction-history"
               required
               rows={6}
               placeholder={

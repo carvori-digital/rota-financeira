@@ -13,6 +13,7 @@ export interface Investment extends Base {
   updated_at: string;
 }
 export interface InvestmentMovement extends Base {
+  ledger_order?: number;
   accounting_kind?: "real_cash" | "historical_position" | "valuation";
   sync_value_cents?: number | null;
   investment_id: string;

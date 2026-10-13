@@ -12,7 +12,7 @@ Consulta em 13/10/2026. Fontes oficiais, sem dados financeiros reais:
 ## Motor implementado
 
 Para cada data `d` publicada na SGS 12: `f_d = 1 + (valor_SGS12_d / 100) * (percentual_CDI_vigente_d / 100)`.
-Posição capitaliza pelo produto dos fatores; 115 é multiplicador 1,15 sobre a taxa diária, não sobre o fator inteiro. SGS 12 já é diária: não aplicar raiz 252 nem tratar como anual. Movimentos são ordenados por data/criação/id, ocorrem antes do fator dessa data; intervalo `[aporte, data de posição)`. Cada aporte começa em sua própria data. Fins de semana/feriados sem observações não recebem fatores. O dia da posição é exclusivo.
+Posição capitaliza pelo produto dos fatores; 115 é multiplicador 1,15 sobre a taxa diária, não sobre o fator inteiro. SGS 12 já é diária: não aplicar raiz 252 nem tratar como anual. Movimentos são ordenados por data/ordem imutável do razão (fallback criação/id nas fixtures sem ordem), ocorrem antes do fator dessa data; intervalo `[aporte, data de posição)`. Cada aporte começa em sua própria data. Fins de semana/feriados sem observações não recebem fatores. O dia da posição é exclusivo.
 
 Sincronizações novas guardam alvo absoluto e estabelecem nova âncora na data. Não são capital novo. Rendimento após âncora é separado de ajustes. Histórico importado é posição sem débito bancário; aportes reais seguem RPC com transação de conta.
 

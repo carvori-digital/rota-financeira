@@ -48,6 +48,12 @@ export function monthlyCommitments(
         continue;
       if (
         c.source === "transaction" &&
+        data.transactions.find((t) => t.id === c.entity)?.type ===
+          "card_payment"
+      )
+        continue;
+      if (
+        c.source === "transaction" &&
         plan.debt_payments.some((p) => p.transaction_id === c.entity)
       )
         continue;
@@ -64,7 +70,14 @@ export function monthlyCommitments(
     }
   for (const o of plan.recurring_occurrences) {
     const r = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
-    if (!r || r.type !== "expense" || o.status === "skipped") continue;
+    if (
+      !r ||
+      r.type !== "expense" ||
+      o.status === "skipped" ||
+      data.transactions.find((t) => t.id === o.transaction_id)?.status ===
+        "cancelled"
+    )
+      continue;
     const t = tx(o.transaction_id);
     const paid = t?.type === "expense" ? t.amount_cents : 0;
     put(
