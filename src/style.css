@@ -896,3 +896,47 @@ dialog > button {
   margin: 0.4rem 0;
   width: 100%;
 }
+
+.export-period {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.export-period input {
+  min-width: 0;
+  width: 100%;
+}
+.export-report .account-line {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.export-report p {
+  overflow-wrap: anywhere;
+}
+
+.reconstruction-values dd {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.export-report .check,
+.reconstruction-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0;
+}
+.export-report .check input,
+.reconstruction-confirm input {
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+.reconstruction-history {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #cdd8c8;
+  border-radius: 10px;
+  font: inherit;
+}

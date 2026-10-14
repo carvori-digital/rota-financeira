@@ -64,11 +64,12 @@ test("Home, planejamento e relatórios compartilham o fechamento e não alteram 
     r.current.closing,
     monthReport(data, plan, "2026-10-02").current.closing,
   );
-  assert.equal(r.completed, 1);
-  assert.equal(r.total, 2);
-  assert.equal(r.percent, 50);
+  assert.equal(r.completed, 0);
+  assert.equal(r.total, 1);
+  assert.equal(r.percent, 0);
   assert.equal(JSON.stringify(data), before);
   data.transactions[2].status = "realized";
+  data.transactions[2].financial_commitment = true;
   assert.equal(experienceReport(data, plan, "2026-10-02").percent, 100);
 });
 test("categorias incluem consumo sem categoria e cartão uma vez, excluindo pagamento de fatura", () => {

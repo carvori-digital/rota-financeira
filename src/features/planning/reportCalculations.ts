@@ -1,6 +1,7 @@
 import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData, Commitment } from "./types.ts";
 import { isRealized, isReserveAccount } from "../../utils/finance.ts";
+import { monthlyCommitments } from "./commitments.ts";
 import { projection, realized } from "./calculations.ts";
 export const commitmentGroups = {
   fixed: "Fixas",
@@ -42,8 +43,9 @@ export function monthReport(
   );
   const paid = paidItems.reduce((s, t) => s + t.amount_cents, 0);
   const incoming = current.items.reduce((s, c) => s + Math.max(0, c.impact), 0);
+  const obligations = monthlyCommitments(data, plan, asOf);
   const groups = Object.entries(commitmentGroups).map(([key, label]) => {
-    const items = current.items.filter(
+    const items = obligations.filter(
       (c) => commitmentGroup(c) === key && c.direction !== "income",
     );
     return {
@@ -55,6 +57,7 @@ export function monthReport(
   });
   return {
     months,
+    obligations,
     current,
     groups,
     paid,

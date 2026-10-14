@@ -13,6 +13,7 @@ export interface Debt extends Base {
   active: boolean;
 }
 export interface DebtPayment extends Base {
+  obligation_amount_cents?: number | null;
   debt_id: string;
   transaction_id: string;
   amount_cents: number;

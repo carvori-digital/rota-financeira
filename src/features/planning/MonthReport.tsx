@@ -19,8 +19,18 @@ export function CommitmentRow({
         <strong>{c.name}</strong>
         <small>
           {displayDate(c.due)} ·{" "}
-          <Status state={c.due <= today() ? "pending" : "forecast"} />
-          {c.due < today() ? " · vencido" : ""}
+          <Status
+            state={
+              "status" in c && c.status === "completed"
+                ? "realized"
+                : c.due <= today()
+                  ? "pending"
+                  : "forecast"
+            }
+          />
+          {c.due < today() && !("status" in c && c.status === "completed")
+            ? " · vencido"
+            : ""}
           {c.impact === 0 ? " · conta de reserva / transferência interna" : ""}
         </small>
       </div>
@@ -100,6 +110,10 @@ export function MonthReport({
         ))}
       </details>
       <h3>Compromissos do mês</h3>
+      <p>
+        {r.obligations.filter((c) => c.status === "completed").length} de{" "}
+        {r.obligations.length} compromissos concluídos
+      </p>
       {r.groups.map((g) => (
         <details className="panel" key={g.key}>
           <summary>

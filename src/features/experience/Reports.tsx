@@ -1,3 +1,4 @@
+import { ExportReport } from "../export/ExportReport";
 import { useState } from "react";
 import type { FinanceData } from "../../types";
 import type { PlanningData } from "../planning/types";
@@ -12,11 +13,13 @@ import { today, displayDate } from "../../utils/finance";
 import { ReportChart } from "./ReportChart";
 import { Donut, MonthlyColumns } from "./Charts";
 export function Reports({
+  owner,
   data,
   plan,
   money,
   hidden,
 }: {
+  owner: string;
   data: FinanceData;
   plan: PlanningData;
   money: Money;
@@ -67,6 +70,7 @@ export function Reports({
         O mês do resumo define o fluxo, os gastos por categoria e a taxa de
         economia.
       </p>
+      <ExportReport key={owner} owner={owner} money={money} hidden={hidden} />
       <section className="panel">
         <div className="section-heading">
           <h2>Fluxo do mês</h2>
@@ -161,7 +165,7 @@ export function Reports({
           <strong>{money(r.current.commitments)}</strong>
         </div>
         <details>
-          <summary>Ver registros previstos</summary>
+          <summary>Ver compromissos do mês</summary>
           {r.groups.map((g) => (
             <div key={g.key}>
               <h3>{g.label}</h3>
@@ -171,7 +175,8 @@ export function Reports({
                     <div>
                       <strong>{c.name}</strong>
                       <small>
-                        {displayDate(c.due)}
+                        {displayDate(c.due)} ·{" "}
+                        {c.status === "completed" ? "Concluído" : "Pendente"}
                         {c.impact === 0 && " · sem efeito no disponível"}
                       </small>
                     </div>

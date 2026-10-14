@@ -1,4 +1,10 @@
-import type { Investment, InvestmentMovement } from "./types.ts";
+import { cdiPosition } from "./cdi.ts";
+import type { CdiHistory } from "./cdi.ts";
+import type {
+  InvestmentRate,
+  Investment,
+  InvestmentMovement,
+} from "./types.ts";
 import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData } from "../planning/types.ts";
 import { balanceSummary } from "../../utils/finance.ts";
@@ -7,10 +13,20 @@ export function investmentValue(
   investment: Investment,
   movements: InvestmentMovement[],
   asOf: string,
+  rates: InvestmentRate[] = [],
+  history?: CdiHistory | null,
 ) {
   const rows = movements.filter(
     (m) => m.investment_id === investment.id && m.date <= asOf,
   );
+  if (investment.yield_type === "percent_cdi")
+    return cdiPosition(
+      rows,
+      asOf,
+      Number(investment.yield_rate),
+      rates.filter((r) => r.investment_id === investment.id),
+      history,
+    );
   let principal = 0,
     value = 0,
     contributed = 0,
@@ -37,6 +53,9 @@ export function investmentValue(
   const current = Math.round(value),
     estimatedYield = current - principal;
   return {
+    complete: true,
+    limitation: null,
+    estimated: investment.yield_type !== "manual",
     current,
     principal,
     contributed,
@@ -57,10 +76,18 @@ export function wealthSummary(
   asOf: string,
 ) {
   const cash = balanceSummary(data.accounts, data.transactions, asOf);
-  const positions = (plan.investments ?? []).map((i) => ({
-    ...investmentValue(i, plan.investment_movements ?? [], asOf),
-    investment: i,
-  }));
+  const positions = (plan.investments ?? [])
+    .filter((i) => !i.replaced_by_id)
+    .map((i) => ({
+      ...investmentValue(
+        i,
+        plan.investment_movements ?? [],
+        asOf,
+        plan.investment_rates ?? [],
+        plan.cdi_history,
+      ),
+      investment: i,
+    }));
   const invested = positions.reduce((s, p) => s + p.current, 0) + cash.reserve;
   const reserve = positions
     .filter((p) => p.investment.is_emergency_reserve)

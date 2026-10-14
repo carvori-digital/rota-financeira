@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { cachedCdi } from "../investments/cdiHistory";
 import { emptyPlanning } from "./types";
 import type { PlanningData } from "./types";
 export async function loadPlanning(user: string): Promise<PlanningData> {
@@ -19,7 +20,10 @@ export async function loadPlanning(user: string): Promise<PlanningData> {
       return [table, rows];
     }),
   );
-  return Object.fromEntries(entries) as unknown as PlanningData;
+  return {
+    ...Object.fromEntries(entries),
+    cdi_history: cachedCdi(),
+  } as unknown as PlanningData;
 }
 export async function rpc(name: string, args: Record<string, unknown>) {
   const r = await supabase!.rpc(name, args);

@@ -201,6 +201,39 @@ const rows = {
     { ...base, id: "link", goal_id: "reserve-goal", account_id: "reserve" },
   ],
 };
+rows.accounts[1].investment_id = "migrated-reserve";
+rows.accounts[1].is_active = false;
+rows.investments = [
+  {
+    ...base,
+    id: "migrated-reserve",
+    name: "Reserva migrada",
+    institution: "",
+    type: "legacy",
+    initial_date: month + "-01",
+    yield_type: "manual",
+    yield_rate: 0,
+    is_emergency_reserve: true,
+    active: true,
+    source_account_id: "reserve",
+    updated_at: base.created_at,
+  },
+];
+rows.investment_movements = [
+  {
+    ...base,
+    id: "legacy-position",
+    investment_id: "migrated-reserve",
+    type: "adjustment",
+    amount_cents: 240000,
+    date: month + "-01",
+    description: "Posição sintética importada",
+    transaction_id: null,
+    source_transaction_id: null,
+    source_account_id: "reserve",
+    ledger_order: 1,
+  },
+];
 for (let i = 1; i <= 3; i++) {
   const d = new Date(date.getFullYear(), date.getMonth() - i, 1),
     period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -273,7 +306,31 @@ export const supabase = {
     };
     return query;
   },
-  async rpc() {
+  async rpc(name) {
+    if (name === "export_financial_snapshot") {
+      const data = { ...structuredClone(rows) };
+      for (const table of [
+        "investment_rates",
+        "investment_reconstructions",
+        "report_month_confirmations",
+        "investments",
+        "investment_movements",
+        "card_adjustments",
+      ])
+        data[table] ??= [];
+      return {
+        error: null,
+        data: {
+          schema_version: 1,
+          owner: user,
+          generated_at: new Date().toISOString(),
+          counts: Object.fromEntries(
+            Object.entries(data).map(([t, rs]) => [t, rs.length]),
+          ),
+          data,
+        },
+      };
+    }
     return {
       data: null,
       error: {

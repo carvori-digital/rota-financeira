@@ -47,9 +47,10 @@ export function MonthlyProgress({
       <details className="progress-details">
         <summary>Como está meu mês?</summary>
         <p className="muted">
-          Contamos saídas do disponível concluídas e ainda previstas no mês.
-          Pagamentos parciais não concluem faturas ou parcelas. Receitas e
-          transferências entre contas disponíveis não entram nesta barra.
+          Contamos obrigações previstas e pagamentos vinculados a elas. Despesas
+          cotidianas não são compromissos. Pagamentos parciais não concluem
+          faturas ou parcelas. Receitas e transferências, aportes e ajustes não
+          entram nesta barra.
         </p>
         <ul className="month-checklist">
           <li>
@@ -78,7 +79,9 @@ export function MonthlyProgress({
                 : "Renda do mês registrada"}
             </li>
           )}
-          {r.groups.find((g) => g.key === "cards")!.items.length > 0 && (
+          {r.groups
+            .find((g) => g.key === "cards")!
+            .items.some((c) => c.status === "pending") && (
             <li>
               <Check size={16} className="unchecked" />
               Faturas aguardando pagamento

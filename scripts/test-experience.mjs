@@ -9,7 +9,9 @@ const { chromium } = await import(
 );
 const server = await createExperienceServer(5176);
 const browser = await chromium.launch({
-  executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+    : {}),
   headless: true,
 });
 const context = await browser.newContext({

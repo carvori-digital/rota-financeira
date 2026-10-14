@@ -18,6 +18,8 @@ export interface Category extends Base {
   type: "income" | "expense";
 }
 export interface Transaction extends Base {
+  financial_commitment?: boolean;
+  commitment_due_date?: string | null;
   status?: "realized" | "pending" | "cancelled";
   planning_group?: "scheduled" | "other";
   adjustment_delta_cents?: number | null;

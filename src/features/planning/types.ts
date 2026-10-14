@@ -1,5 +1,6 @@
 import type { Base } from "../../types/index.ts";
 import type {
+  InvestmentRate,
   Investment,
   InvestmentMovement,
   ClassificationReview,
@@ -18,6 +19,9 @@ export interface ReserveLink extends Base {
   account_id: string;
 }
 export interface PlanningData {
+  investment_reconstructions?: import("../investments/types.ts").InvestmentReconstruction[];
+  investment_rates?: InvestmentRate[];
+  cdi_history?: import("../investments/cdi.ts").CdiHistory | null;
   investments?: Investment[];
   investment_movements?: InvestmentMovement[];
   classification_reviews?: ClassificationReview[];
@@ -33,6 +37,8 @@ export interface PlanningData {
   reserve_account_links: ReserveLink[];
 }
 export const emptyPlanning: PlanningData = {
+  investment_reconstructions: [],
+  investment_rates: [],
   investments: [],
   investment_movements: [],
   classification_reviews: [],
