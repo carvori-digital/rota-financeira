@@ -4,6 +4,9 @@ alter table public.investments add constraint investments_yield_type_check check
 alter table public.investments drop constraint investments_yield_rate_check;
 alter table public.investments add constraint investments_yield_rate_check check(yield_rate>=0 and yield_rate<=case when yield_type='percent_cdi' then 1000 else 100 end);
 alter table public.investment_movements add column ledger_order bigint generated always as identity;
+-- Supabase defaults grant sequence UPDATE/USAGE to API roles. Only the
+-- definer RPCs may advance this technical order; clients must not reset it.
+revoke all on sequence public.investment_movements_ledger_order_seq from public,anon,authenticated;
 alter table public.investment_movements add column sync_value_cents bigint check(sync_value_cents between 0 and 1000000000000);
 alter table public.investment_movements add column accounting_kind text check(accounting_kind in ('real_cash','historical_position','valuation'));
 create table public.investment_rates (
@@ -57,7 +60,8 @@ declare existing public.investment_movements; i public.investments; result uuid;
  result=public.record_investment_movement_legacy(p_id,p_investment,p_type,p_amount,p_date,p_account,p_description);
  update public.investment_movements set accounting_kind=case when p_type='adjustment' then 'valuation' else 'real_cash' end,sync_value_cents=case when p_type='adjustment' then p_amount else null end where id=result and user_id=auth.uid();return result;
 end $$;
-revoke all on function public.investment_value_fixed(uuid,date),public.investment_value(uuid,date),public.record_investment_movement(uuid,uuid,text,bigint,date,uuid,text),public.append_investment_rate(uuid,uuid,date,numeric) from public,anon;
+revoke all on function public.investment_value_fixed(uuid,date) from public,anon,authenticated;
+revoke all on function public.investment_value(uuid,date),public.record_investment_movement(uuid,uuid,text,bigint,date,uuid,text),public.append_investment_rate(uuid,uuid,date,numeric) from public,anon;
 grant execute on function public.investment_value(uuid,date),public.record_investment_movement(uuid,uuid,text,bigint,date,uuid,text),public.append_investment_rate(uuid,uuid,date,numeric) to authenticated;
 notify pgrst,'reload schema';
 commit;

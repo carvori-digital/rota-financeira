@@ -17,6 +17,10 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
     await db.exec(
       "create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;",
     );
+    // Match the linked Supabase defaults, including automatic sequence grants.
+    await db.exec(
+      "alter default privileges in schema public grant all on tables to anon,authenticated;alter default privileges in schema public grant all on sequences to anon,authenticated;alter default privileges in schema public grant execute on functions to anon,authenticated;",
+    );
     const fs = (await readdir("supabase/migrations"))
       .filter((f) => f.endsWith(".sql"))
       .sort();
@@ -60,6 +64,23 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
     for (const f of fs.filter((f) => f >= "202610130008"))
       await db.exec(await readFile("supabase/migrations/" + f, "utf8"));
     await as(a);
+    await t.test(
+      "API roles cannot reset ledger order or call private legacy helpers",
+      async () => {
+        for (const role of ["anon", "authenticated"]) {
+          const [permissions] = await q(
+            "select has_sequence_privilege($1,'public.investment_movements_ledger_order_seq','USAGE') usage,has_sequence_privilege($1,'public.investment_movements_ledger_order_seq','UPDATE') update,has_function_privilege($1,'public.investment_value_fixed(uuid,date)','EXECUTE') fixed,has_function_privilege($1,'public.record_investment_movement_legacy(uuid,uuid,text,bigint,date,uuid,text)','EXECUTE') legacy",
+            [role],
+          );
+          assert.deepEqual(permissions, {
+            usage: false,
+            update: false,
+            fixed: false,
+            legacy: false,
+          });
+        }
+      },
+    );
     const after = {
       transactions: await q("select * from transactions order by id"),
       accounts: await q("select * from accounts order by id"),
