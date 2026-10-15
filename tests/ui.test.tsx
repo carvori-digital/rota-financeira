@@ -1068,7 +1068,7 @@ describe("integração V0.2", () => {
     await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     expect(
       within(screen.getByRole("dialog")).getAllByRole("button"),
-    ).toHaveLength(9);
+    ).toHaveLength(11);
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Receita",
@@ -1148,7 +1148,7 @@ describe("integração V0.2", () => {
     await user.click(screen.getByRole("button", { name: "Novo", exact: true }));
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Aporte/transferência",
+        name: "Metas e transferências",
         exact: true,
       }),
     );

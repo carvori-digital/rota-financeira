@@ -1,7 +1,7 @@
 // Local browser integration: real migrated PostgreSQL, simulated Auth/HTTP,
 // and all outbound requests blocked. No remote Supabase or production writes.
 import assert from "node:assert/strict";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
@@ -39,6 +39,8 @@ const names = new Set([
   "investment_movements",
   "classification_reviews",
   "card_adjustments",
+  "investment_rates",
+  "investment_reconstructions",
 ]);
 const identifier = (value) => {
   assert.match(value, /^[a-z_]+$/);
@@ -63,14 +65,9 @@ try {
   await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
  grant usage on schema public,auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
-  for (const name of [
-    "202610010001_initial.sql",
-    "202610010002_planning.sql",
-    "202610010003_planning_integrity.sql",
-    "202610020004_financial_clarity.sql",
-    "202610030005_investments.sql",
-    "202610030006_card_corrections.sql",
-  ])
+  for (const name of (await readdir("supabase/migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
     await db.exec(
       await readFile(
         new URL(`../supabase/migrations/${name}`, import.meta.url),
@@ -194,6 +191,11 @@ try {
             "keep_classification",
             "resolve_transaction",
             "adjust_account_balance",
+            "reconcile_operational_balance",
+            "create_simple_investment",
+            "simple_investment_movement",
+            "delete_simple_investment",
+            "reverse_simple_investment_movement",
           ].includes(table),
         );
         const keys = Object.keys(payload),
@@ -291,6 +293,14 @@ try {
       .getByRole("button", { name, exact: true })
       .click();
   };
+  const confirmInvestment = async () => {
+    await button("Conferir movimentação").click();
+    await page
+      .getByLabel("Conferi os valores e confirmo esta movimentação")
+      .check();
+    await button("Confirmar movimentação").click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+  };
   const capture = async (name) => {
     await mkdir("test-results/mobile", { recursive: true });
     await page.screenshot({
@@ -313,7 +323,7 @@ try {
     try {
       await page.goto("http://127.0.0.1:5174", {
         waitUntil: "domcontentloaded",
-        timeout: 30000,
+        timeout: 60000,
       });
       break;
     } catch (e) {
@@ -430,23 +440,27 @@ try {
   await button("Adicionar investimento").click();
   await field("Nome").fill("Reserva com rendimento");
   await field("Instituição").fill("Banco local");
+  await field("Saldo inicial já existente (R$)").fill("500,00");
   await field("Rendimento").selectOption("fixed_annual");
-  await field("Taxa fixa (%)").fill("10");
+  await field("Taxa fixa (%) ou percentual do CDI (ex.: 115)").fill("10");
   await field("Reserva de emergência").check();
+  await page.getByLabel(/Conferi que este saldo/).check();
   await save();
   await button("Aportar").click();
   await field("Valor (R$)").fill("100,00");
   await field("Conta de origem").selectOption(cash);
-  await save();
+  await page.getByLabel(/este movimento ainda não foi registrado/).check();
+  await confirmInvestment();
   await button("Resgatar").click();
   await field("Valor (R$)").fill("25,00");
   await field("Conta de destino").selectOption(cash);
-  await save();
+  await page.getByLabel(/este movimento ainda não foi registrado/).check();
+  await confirmInvestment();
   await page.getByText("Valor real e histórico", { exact: true }).click();
   await button("Sincronizar valor atual").click();
   await field("Valor real no banco (R$)").fill("80,00");
   await field("Descrição").fill("Conferência local");
-  await save();
+  await confirmInvestment();
   assert.equal(
     Number(
       (
@@ -457,7 +471,7 @@ try {
     ),
     8000,
   );
-  assert.equal((await query("select * from investment_movements")).length, 3);
+  assert.equal((await query("select * from investment_movements")).length, 4);
   results.push(
     "investimento com taxa fixa, aporte, resgate e sincronização atômicos via UI/RLS",
   );
@@ -480,7 +494,7 @@ try {
   await field("Conta de destino").selectOption(reserve);
   await field("Valor (R$)").fill("40,00");
   await save();
-  await quick("Aporte/transferência");
+  await quick("Metas e transferências");
   await button("Aportar em Viagem local").click();
   await field("Valor (R$)").fill("25,00");
   await save();
@@ -578,7 +592,14 @@ try {
     .getByRole("button", { name: "Ajustar saldo atual", exact: true })
     .click();
   await field("Saldo atual correto (R$)").fill("-25,00");
-  await save();
+  await button("Conferir reconciliação").click();
+  await page
+    .getByLabel(
+      "Conferi os movimentos existentes e faltantes; confirmo o ajuste",
+    )
+    .check();
+  await button("Confirmar ajuste de saldo").click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
   assert.equal(await actualCash(), -2500);
   assert.equal(
     Number(
@@ -628,6 +649,48 @@ try {
     await fit(`${width}px investimento modal`);
     await capture(`${width}-investment-form`);
     await button("Fechar").click();
+    for (const [label, accountLabel] of [
+      ["Aportar em investimento", "Conta de origem"],
+      ["Resgatar investimento", "Conta de destino"],
+    ]) {
+      await quick(label);
+      await field(accountLabel).selectOption(cash);
+      await field("Valor (R$)").fill("10,00");
+      await page.getByLabel(/este movimento ainda não foi registrado/).check();
+      await fit(`${width}px ${label} formulário`);
+      await button("Conferir movimentação").click();
+      await fit(`${width}px ${label} confirmação`);
+      await capture(
+        `${width}-${label.startsWith("Aportar") ? "contribution" : "withdrawal"}-preview`,
+      );
+      await button("Fechar").click();
+    }
+    const investmentActions = page
+      .getByText("Ações do registro", { exact: true })
+      .first();
+    if ((await investmentActions.locator("..").getAttribute("open")) === null)
+      await investmentActions.click();
+    await button("Excluir investimento").click();
+    await fit(`${width}px exclusão confirmada`);
+    await capture(`${width}-delete-investment`);
+    await button("Fechar").click();
+    await nav("Ajustes").click();
+    const accountSettings = page
+      .locator(".settings-account")
+      .filter({ hasText: "Conta local" });
+    if ((await accountSettings.getAttribute("open")) === null)
+      await accountSettings.locator("summary").click();
+    await page
+      .locator(".settings-account")
+      .filter({ hasText: "Conta local" })
+      .getByRole("button", { name: "Ajustar saldo atual", exact: true })
+      .click();
+    await fit(`${width}px reconciliação de conta`);
+    await button("Conferir reconciliação").click();
+    await fit(`${width}px diferença de saldo`);
+    await button("Fechar").click();
+    await nav("Planejar").click();
+
     await tab("Dívidas e parcelas").click();
     await button("Registrar pagamento").first().click();
     await fit(`${width}px pagamento dívida modal`);
@@ -661,7 +724,7 @@ try {
         errors,
         outbound,
         backend:
-          "PGlite com RLS authenticated e migrations 001–006; Auth e HTTP simulados; nenhum acesso remoto",
+          "PGlite com RLS authenticated e migrations 001–012; Auth e HTTP simulados; nenhum acesso remoto",
       },
       null,
       2,

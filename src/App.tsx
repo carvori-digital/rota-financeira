@@ -1,3 +1,4 @@
+import { QuickInvestmentFlow } from "./features/investments/InvestmentOperations";
 import { useEffect, useRef, useState } from "react";
 import { MoneyInput } from "./components/MoneyInput";
 import type { FormEvent } from "react";
@@ -97,6 +98,9 @@ export default function App() {
     document.body.scrollTop = 0;
   }, [page]);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [investmentOperation, setInvestmentOperation] = useState<
+    "contribution" | "withdrawal" | null
+  >(null);
   const [financialAction, setFinancialAction] =
     useState<FinancialAction | null>(null);
   const [setup, setSetup] = useState(false);
@@ -259,6 +263,13 @@ export default function App() {
         initialType: kind as "income" | "expense" | "transfer",
         accountId: lastAccount.current,
       });
+    else if (
+      kind === "investmentContribution" ||
+      kind === "investmentWithdrawal"
+    )
+      setInvestmentOperation(
+        kind === "investmentContribution" ? "contribution" : "withdrawal",
+      );
     else if (kind === "schedule") setFinancialAction({ kind: "schedule" });
     else if (kind.startsWith("contribution:")) {
       const goal = data.goals.find((g) => g.id === kind.slice(13));
@@ -417,7 +428,7 @@ export default function App() {
                   </button>
                 </div>
                 {data.accounts
-                  .filter((a) => !a.investment_id)
+                  .filter((a) => !a.investment_id && !a.investment_retired)
                   .map((a) => (
                     <details className="settings-account" key={a.id}>
                       <summary>
@@ -562,6 +573,21 @@ export default function App() {
             setNotice(
               "Salvo com sucesso. Você já pode adicionar outra movimentação.",
             );
+          }}
+        />
+      )}
+      {investmentOperation && (
+        <QuickInvestmentFlow
+          kind={investmentOperation}
+          data={data}
+          plan={planning.data}
+          hidden={valuesHidden}
+          onSaved={refresh}
+          onClose={() => setInvestmentOperation(null)}
+          onCreate={() => {
+            setInvestmentOperation(null);
+            setPlanningSection("reserve");
+            setPage("planning");
           }}
         />
       )}

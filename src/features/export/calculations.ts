@@ -477,7 +477,7 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
       ]),
     ),
     investments: (s.plan.investments ?? [])
-      .filter((i) => !i.replaced_by_id)
+      .filter((i) => !i.replaced_by_id && !i.deleted_at)
       .map((i) =>
         pick(i, [
           ...base,

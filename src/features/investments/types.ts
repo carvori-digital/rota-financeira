@@ -1,5 +1,6 @@
 import type { Base } from "../../types/index.ts";
 export interface Investment extends Base {
+  deleted_at?: string | null;
   name: string;
   institution: string;
   type: string;
@@ -13,8 +14,14 @@ export interface Investment extends Base {
   updated_at: string;
 }
 export interface InvestmentMovement extends Base {
+  reversed_by?: string | null;
   ledger_order?: number;
-  accounting_kind?: "real_cash" | "historical_position" | "valuation";
+  accounting_kind?:
+    | "real_cash"
+    | "historical_position"
+    | "valuation"
+    | "initial_position"
+    | "reconciled_transfer";
   sync_value_cents?: number | null;
   investment_id: string;
   type: "contribution" | "withdrawal" | "adjustment";

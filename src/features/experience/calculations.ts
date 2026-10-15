@@ -33,7 +33,10 @@ export function experienceReport(
     data.accounts
       .filter(
         (a) =>
-          !a.investment_id && isReserveAccount(a) && selected.includes(a.id),
+          !a.investment_id &&
+          !a.investment_retired &&
+          isReserveAccount(a) &&
+          selected.includes(a.id),
       )
       .reduce((s, a) => s + balance(a, data.transactions, asOf), 0);
   const total = completed + pending.length;

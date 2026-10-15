@@ -67,7 +67,7 @@ export function balanceSummary(
 ) {
   return accounts.reduce(
     (totals, account) => {
-      if (account.investment_id) return totals;
+      if (account.investment_id || account.investment_retired) return totals;
       const cents = balance(account, transactions, cutoff);
       totals.total += cents;
       if (isReserveAccount(account)) totals.reserve += cents;

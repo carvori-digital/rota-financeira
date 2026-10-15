@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   investmentValue,
   wealthSummary,
+  recordedInvestmentValue,
 } from "../src/features/investments/calculations.ts";
 import { digitMoney, pastedMoney } from "../src/utils/moneyInput.ts";
 import { emptyPlanning } from "../src/features/planning/types.ts";
@@ -41,6 +42,65 @@ const m = (
   transaction_id: null,
   source_transaction_id: null,
   source_account_id: null,
+});
+
+test("saldo inicial/âncora não inventa rendimento anterior e estimativa não vira saldo resgatável", () => {
+  const rows: InvestmentMovement[] = [
+    {
+      ...m("2026-01-01", 50000, "adjustment"),
+      sync_value_cents: 50000,
+      accounting_kind: "initial_position",
+      ledger_order: 1,
+    },
+  ];
+  assert.equal(investmentValue(investment, rows, "2025-12-31").current, 0);
+  assert.equal(investmentValue(investment, rows, "2026-01-01").current, 50000);
+  assert.equal(investmentValue(investment, rows, "2027-01-01").current, 55000);
+  assert.equal(recordedInvestmentValue(investment, rows, "2027-01-01"), 50000);
+  rows.push({
+    ...m("2027-01-01", 1000, "adjustment"),
+    sync_value_cents: 51000,
+    ledger_order: 2,
+  });
+  assert.equal(investmentValue(investment, rows, "2027-01-01").current, 51000);
+  assert.equal(recordedInvestmentValue(investment, rows, "2027-01-01"), 51000);
+});
+
+test("origem contábil aposentada e investimento excluído não reaparecem no patrimônio", () => {
+  const data = {
+    accounts: [
+      {
+        id: "old",
+        user_id: "u",
+        created_at: "",
+        name: "Origem",
+        type: "savings",
+        is_active: false,
+        currency: "BRL",
+        initial_balance_cents: 50000,
+        investment_retired: true,
+      },
+    ],
+    transactions: [],
+    categories: [],
+    goals: [],
+    goal_contributions: [],
+  };
+  const result = wealthSummary(
+    data,
+    {
+      ...emptyPlanning,
+      investments: [
+        { ...investment, active: false, deleted_at: "2026-10-14T12:00:00Z" },
+      ],
+      investment_movements: [m("2026-01-01", 50000)],
+    },
+    "2026-10-14",
+  );
+  assert.equal(result.gross, 0);
+  assert.equal(result.invested, 0);
+  assert.equal(result.reserve, 0);
+  assert.deepEqual(result.positions, []);
 });
 test("juros compostos por aporte, retirada e sincronização sem rendimento diário persistido", () => {
   assert.equal(

@@ -4,7 +4,11 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    include: ["tests/ui.test.tsx", "tests/sprint03-ui.test.tsx"],
+    include: [
+      "tests/ui.test.tsx",
+      "tests/sprint03-ui.test.tsx",
+      "tests/adjust04-ui.test.tsx",
+    ],
     clearMocks: true,
   },
 });

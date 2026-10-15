@@ -257,7 +257,9 @@ export function QuickActions({
                 ["purchase", "Compra no cartão"],
                 ["payment", "Pagamento"],
                 ["installment", "Dívida / parcelamento"],
-                ["contribution", "Aporte/transferência"],
+                ["contribution", "Metas e transferências"],
+                ["investmentContribution", "Aportar em investimento"],
+                ["investmentWithdrawal", "Resgatar investimento"],
               ]
         ).map(([kind, label]) => (
           <button

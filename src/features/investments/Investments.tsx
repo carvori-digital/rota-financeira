@@ -9,7 +9,12 @@ import { today, displayDate } from "../../utils/finance";
 import { ReconstructInvestment } from "./ReconstructInvestment";
 import { updateCdi } from "./cdiHistory";
 import { investmentValue } from "./calculations";
-import { DeleteRecord } from "../planning/DeleteRecord";
+import {
+  DeleteInvestment,
+  InvestmentMovementEditor,
+  ReverseInvestmentMovement,
+} from "./InvestmentOperations";
+import { recordedInvestmentValue } from "./calculations";
 type Action = {
   kind: "edit" | "contribution" | "withdrawal" | "adjustment" | "rate";
   investment?: Investment;
@@ -41,7 +46,8 @@ export function Investments({
       </div>
       {cdiMessage && <p role="status">{cdiMessage}</p>}
       {(plan.investments ?? []).some(
-        (i) => i.yield_type === "percent_cdi" && !i.replaced_by_id,
+        (i) =>
+          i.yield_type === "percent_cdi" && !i.replaced_by_id && !i.deleted_at,
       ) && (
         <details className="panel">
           <summary>Atualizar histórico CDI</summary>
@@ -59,7 +65,10 @@ export function Investments({
               try {
                 const start = (plan.investments ?? [])
                   .filter(
-                    (i) => i.yield_type === "percent_cdi" && !i.replaced_by_id,
+                    (i) =>
+                      i.yield_type === "percent_cdi" &&
+                      !i.replaced_by_id &&
+                      !i.deleted_at,
                   )
                   .map((i) => i.initial_date)
                   .sort()[0];
@@ -80,13 +89,15 @@ export function Investments({
           </button>
         </details>
       )}
-      {!(plan.investments ?? []).filter((i) => !i.replaced_by_id).length && (
+      {!(plan.investments ?? []).filter(
+        (i) => !i.replaced_by_id && !i.deleted_at,
+      ).length && (
         <p className="empty">
           Cadastre um investimento para acompanhar aportes e reserva.
         </p>
       )}
       {(plan.investments ?? [])
-        .filter((i) => !i.replaced_by_id)
+        .filter((i) => !i.replaced_by_id && !i.deleted_at)
         .map((i) => {
           const v = investmentValue(
             i,
@@ -116,10 +127,8 @@ export function Investments({
                 <strong>{money(v.current)}</strong>
               </div>
               <small>
-                {i.yield_type === "manual"
-                  ? "Valor registrado"
-                  : "Valor atual ESTIMADO"}{" "}
-                · atualização {displayDate(v.lastUpdate)}
+                {v.estimated ? "Valor atual ESTIMADO" : "Valor registrado"} ·
+                atualização {displayDate(v.lastUpdate)}
               </small>
               {v.limitation && (
                 <p role="status" className="muted">
@@ -150,6 +159,20 @@ export function Investments({
                   </dd>
                 </div>
               </dl>
+              <p className="muted">
+                Saldo resgatável registrado:{" "}
+                {money(
+                  recordedInvestmentValue(
+                    i,
+                    plan.investment_movements ?? [],
+                    today(),
+                  ),
+                )}
+                .{" "}
+                {i.active
+                  ? "Estimativas não são creditadas automaticamente."
+                  : "Arquivado: edite e marque Ativo para movimentar."}
+              </p>
               <div className="actions">
                 <button
                   disabled={!i.active}
@@ -160,7 +183,7 @@ export function Investments({
                   Aportar
                 </button>
                 <button
-                  disabled={!i.active || v.current <= 0}
+                  disabled={!i.active}
                   onClick={() =>
                     setAction({ kind: "withdrawal", investment: i })
                   }
@@ -229,28 +252,47 @@ export function Investments({
                                   ? "Aporte histórico · sem débito em conta"
                                   : "Aporte",
                               withdrawal: "Resgate",
-                              adjustment: "Ajuste",
+                              adjustment:
+                                m.accounting_kind === "initial_position"
+                                  ? "Saldo inicial"
+                                  : m.sync_value_cents != null
+                                    ? "Sincronização de saldo"
+                                    : "Ajuste",
                             }[m.type]
                           }
                         </strong>
                         <small>
-                          {displayDate(m.date)} · {m.description}
+                          {displayDate(m.date)} · {i.name} ·{" "}
+                          {data.accounts.find(
+                            (a) =>
+                              a.id ===
+                              (data.transactions.find(
+                                (t) =>
+                                  t.id ===
+                                  (m.transaction_id ?? m.source_transaction_id),
+                              )?.[
+                                m.source_transaction_id &&
+                                m.type === "withdrawal"
+                                  ? "destination_account_id"
+                                  : "account_id"
+                              ] ?? m.source_account_id),
+                          )?.name ?? "Sem conta bancária"}{" "}
+                          · {m.description}
                         </small>
                       </div>
                       <span>{money(m.amount_cents)}</span>
+                      <ReverseInvestmentMovement
+                        movement={m}
+                        onSaved={onSaved}
+                      />
                     </div>
                   ))}
               </details>
-              <DeleteRecord
-                kind="investment"
-                id={i.id}
+              <DeleteInvestment
+                investment={i}
+                plan={plan}
+                hidden={hidden}
                 onSaved={onSaved}
-                blocked={
-                  i.source_account_id
-                    ? "Este investimento foi migrado de uma conta com histórico financeiro e não pode ser excluído diretamente."
-                    : undefined
-                }
-                explanation="Os movimentos deste investimento serão removidos. Aportes e resgates vinculados serão desfeitos nas contas de origem e destino."
               />
             </article>
           );
@@ -268,16 +310,31 @@ export function Investments({
           }}
         />
       )}
-      {action && (
-        <InvestmentEditor
-          key={action.kind + action.investment?.id}
-          action={action}
+      {action &&
+      ["contribution", "withdrawal", "adjustment"].includes(action.kind) &&
+      action.investment ? (
+        <InvestmentMovementEditor
+          key={action.kind + action.investment.id}
+          investment={action.investment}
+          kind={action.kind as "contribution" | "withdrawal" | "adjustment"}
           data={data}
           plan={plan}
           hidden={hidden}
           onClose={() => setAction(null)}
           onSaved={onSaved}
         />
+      ) : (
+        action && (
+          <InvestmentEditor
+            key={action.kind + action.investment?.id}
+            action={action}
+            data={data}
+            plan={plan}
+            hidden={hidden}
+            onClose={() => setAction(null)}
+            onSaved={onSaved}
+          />
+        )
       )}
     </>
   );
@@ -315,7 +372,22 @@ function InvestmentEditor({
       title={title}
       onClose={onClose}
       onSubmit={async (f) => {
-        if (action.kind === "edit")
+        if (action.kind === "edit" && !i) {
+          await rpc("create_simple_investment", {
+            p_id: id.current,
+            p_payload: {
+              name: text(f, "name"),
+              institution: text(f, "institution"),
+              type: text(f, "type"),
+              initial_date: text(f, "date"),
+              yield_type: text(f, "yield"),
+              yield_rate: Number(text(f, "rate").replace(",", ".")),
+              reserve: f.get("reserve") === "on",
+              initial_cents: cents(f, "initial", true) ?? 0,
+              acknowledged: f.get("acknowledged") === "on",
+            },
+          });
+        } else if (action.kind === "edit")
           await save(
             "investments",
             i?.id ?? id.current,
@@ -403,10 +475,21 @@ function InvestmentEditor({
                   defaultValue="0"
                 />
               </Field>
+              <Amount
+                name="initial"
+                label="Saldo inicial já existente (R$)"
+                hidden={hidden}
+                optional
+              />
               <p className="muted">
-                Depois de cadastrar, registre o aporte ou sincronize um saldo já
-                existente.
+                A data inicial é a data deste saldo. Nenhuma conta será debitada
+                e nenhum rendimento anterior será inventado.
               </p>
+              <label className="check">
+                <input type="checkbox" name="acknowledged" required />
+                Conferi que este saldo não está representado em outra conta ou
+                investimento do Rota
+              </label>
             </>
           )}
           {i && (

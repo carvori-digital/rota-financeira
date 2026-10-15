@@ -6,6 +6,7 @@ export interface Base {
   created_at: string;
 }
 export interface Account extends Base {
+  investment_retired?: boolean;
   investment_id?: string | null;
   name: string;
   type: string;

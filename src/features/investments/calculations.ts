@@ -9,6 +9,29 @@ import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData } from "../planning/types.ts";
 import { balanceSummary } from "../../utils/finance.ts";
 import { invoices } from "../cards/calculations.ts";
+export function recordedInvestmentValue(
+  investment: Investment,
+  movements: InvestmentMovement[],
+  asOf: string,
+) {
+  return movements
+    .filter((m) => m.investment_id === investment.id && m.date <= asOf)
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        (a.ledger_order ?? 0) - (b.ledger_order ?? 0) ||
+        a.created_at.localeCompare(b.created_at) ||
+        a.id.localeCompare(b.id),
+    )
+    .reduce(
+      (value, m) =>
+        m.sync_value_cents != null
+          ? m.sync_value_cents
+          : value +
+            (m.type === "withdrawal" ? -m.amount_cents : m.amount_cents),
+      0,
+    );
+}
 export function investmentValue(
   investment: Investment,
   movements: InvestmentMovement[],
@@ -16,9 +39,15 @@ export function investmentValue(
   rates: InvestmentRate[] = [],
   history?: CdiHistory | null,
 ) {
-  const rows = movements.filter(
-    (m) => m.investment_id === investment.id && m.date <= asOf,
-  );
+  const rows = movements
+    .filter((m) => m.investment_id === investment.id && m.date <= asOf)
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        (a.ledger_order ?? 0) - (b.ledger_order ?? 0) ||
+        a.created_at.localeCompare(b.created_at) ||
+        a.id.localeCompare(b.id),
+    );
   if (investment.yield_type === "percent_cdi")
     return cdiPosition(
       rows,
@@ -45,7 +74,10 @@ export function investmentValue(
             days / (investment.yield_type === "fixed_annual" ? 365 : 30),
           );
     principal += signed;
-    value += signed * factor;
+    value =
+      m.sync_value_cents != null
+        ? m.sync_value_cents * factor
+        : value + signed * factor;
     if (m.type === "contribution") contributed += m.amount_cents;
     else if (m.type === "withdrawal") withdrawn += m.amount_cents;
     else adjustments += m.amount_cents;
@@ -77,7 +109,7 @@ export function wealthSummary(
 ) {
   const cash = balanceSummary(data.accounts, data.transactions, asOf);
   const positions = (plan.investments ?? [])
-    .filter((i) => !i.replaced_by_id)
+    .filter((i) => !i.replaced_by_id && !i.deleted_at)
     .map((i) => ({
       ...investmentValue(
         i,

@@ -21,6 +21,7 @@ const candidates = [
   "recurring_occurrences",
   "reserve_account_links",
   "investment_rates",
+  "investment_operations",
   "investment_reconstructions",
   "report_month_confirmations",
   "investments",

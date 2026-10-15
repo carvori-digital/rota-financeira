@@ -254,7 +254,7 @@ export function Dashboard({
           </div>
         </dl>
         {data.accounts
-          .filter((a) => !a.investment_id)
+          .filter((a) => !a.investment_id && !a.investment_retired)
           .map((a) => (
             <div className="account-line" key={a.id}>
               <span>

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Account, FinanceData, Transaction } from "../../types";
-import { balance, today } from "../../utils/finance";
+import { balance, today, money, displayDate } from "../../utils/finance";
 import { Amount, Field, Modal, cents, text } from "./ui";
 import { rpc, save } from "./queries";
 export type FinancialAction =
@@ -26,6 +26,10 @@ export function FinancialActions({
     t?.type === "income" ? "income" : "expense",
   );
   const [resolution, setResolution] = useState("realize");
+  const [target, setTarget] = useState<number | null>(null);
+  const recorded =
+    action.kind === "adjust" ? balance(action.account, data.transactions) : 0;
+  const showMoney = (n: number) => (hidden ? "••••" : money(n));
   return (
     <Modal
       title={
@@ -38,14 +42,30 @@ export function FinancialActions({
               : "Agendar receita/despesa"
       }
       onClose={onClose}
+      submitLabel={
+        action.kind === "adjust"
+          ? target === null
+            ? "Conferir reconciliação"
+            : "Confirmar ajuste de saldo"
+          : "Salvar"
+      }
       onSubmit={async (f) => {
-        if (action.kind === "adjust")
-          await rpc("adjust_account_balance", {
+        if (action.kind === "adjust") {
+          if (target === null) {
+            setTarget(cents(f)!);
+            return false;
+          }
+          if (f.get("confirmed") !== "on")
+            throw new Error(
+              "Confirme a revisão dos movimentos antes do ajuste.",
+            );
+          await rpc("reconcile_operational_balance", {
             p_id: id.current,
             p_account: action.account.id,
-            p_target: cents(f),
+            p_target: target,
+            p_expected: recorded,
           });
-        else if (action.kind === "resolve")
+        } else if (action.kind === "resolve")
           await rpc("resolve_transaction", {
             p_id: action.transaction.id,
             p_cancel: resolution === "cancel",
@@ -82,12 +102,69 @@ export function FinancialActions({
             {action.account.name}: saldo calculado a partir do histórico. O
             ajuste fica no extrato, sem contar como receita ou despesa.
           </p>
-          <Amount
-            label="Saldo atual correto (R$)"
-            allowNegative
-            hidden={hidden}
-            value={balance(action.account, data.transactions)}
-          />
+          <p>
+            Saldo registrado: <strong>{showMoney(recorded)}</strong>
+          </p>
+          <details open>
+            <summary>Movimentações já consideradas</summary>
+            {data.transactions
+              .filter(
+                (t) =>
+                  (t.account_id === action.account.id ||
+                    t.destination_account_id === action.account.id) &&
+                  t.status !== "pending" &&
+                  t.status !== "cancelled" &&
+                  t.transaction_date <= today(),
+              )
+              .sort((a, b) =>
+                b.transaction_date.localeCompare(a.transaction_date),
+              )
+              .map((t) => (
+                <p key={t.id}>
+                  {displayDate(t.transaction_date)} ·{" "}
+                  {t.type === "transfer"
+                    ? "Transferência"
+                    : t.type === "adjustment"
+                      ? "Ajuste / investimento"
+                      : t.type === "income"
+                        ? "Receita"
+                        : "Despesa"}{" "}
+                  · {showMoney(t.amount_cents)} · {t.description}
+                </p>
+              ))}
+          </details>
+          <p className="muted">
+            Lance receitas e despesas faltantes em Novo. Para aportes ou
+            resgates, use as ações de investimento; uma transferência já
+            existente deve ser reconciliada sem novo débito ou crédito. Ajuste
+            somente diferenças não explicadas após conferir o histórico.
+          </p>
+          {target === null ? (
+            <Amount
+              label="Saldo atual correto (R$)"
+              allowNegative
+              hidden={hidden}
+              value={balance(action.account, data.transactions)}
+            />
+          ) : (
+            <>
+              <p>Saldo real informado: {showMoney(target)}</p>
+              <p>
+                Diferença e efeito da correção: {showMoney(target - recorded)}
+              </p>
+              <p>
+                Será registrado um ajuste rastreável, sem receita, despesa ou
+                compromisso.
+              </p>
+              <label className="check">
+                <input name="confirmed" type="checkbox" required />
+                Conferi os movimentos existentes e faltantes; confirmo o ajuste
+              </label>
+              <button type="button" onClick={() => setTarget(null)}>
+                Voltar e corrigir
+              </button>
+            </>
+          )}
         </>
       ) : action.kind === "resolve" ? (
         <>
