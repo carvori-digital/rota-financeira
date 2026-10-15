@@ -36,6 +36,11 @@ export async function save(
   payload: Record<string, unknown>,
   existing = false,
 ) {
+  if (table === "transactions" && !existing)
+    return rpc("create_financial_transaction", {
+      p_id: id,
+      p_payload: payload,
+    });
   if (table === "card_purchases") {
     if (existing) throw new Error("Use a correção auditável de compras");
     return rpc("create_card_purchase", { p_id: id, p_payload: payload });

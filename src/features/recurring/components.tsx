@@ -7,6 +7,7 @@ import type { RecurringItem } from "./types";
 import {
   recurringDates,
   occurrenceAmount,
+  occurrenceDefinition,
   occurrencePayments,
 } from "./calculations";
 import { addMonths } from "../planning/dates";
@@ -106,7 +107,7 @@ export function RecurringPanel({
                     </button>
                   )}
                   <button
-                    disabled={date > now}
+                    disabled={false}
                     onClick={() => onResolve(r, date, false)}
                   >
                     Realizar
@@ -127,7 +128,12 @@ export function RecurringPanel({
               .map((o) => {
                 const paid = occurrencePayments(
                   o,
-                  r.type,
+                  occurrenceDefinition(
+                    r,
+                    o.due_date,
+                    plan.recurring_occurrences,
+                    transactions,
+                  ).type,
                   transactions,
                   plan.recurring_payments ?? [],
                   now,

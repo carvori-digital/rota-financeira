@@ -1,0 +1,287 @@
+{
+  "audited_on": "2026-10-15",
+  "collected_at": "2026-10-15T13:42:15.572Z",
+  "base": "fe99595b49cf92f3e1b50a15679277d6cae8ecfc",
+  "production_reference_supplied_by_user": "main d203c47",
+  "branch": "codex/auditoria-estrutural-financeira",
+  "scope": {
+    "synthetic_data_only": true,
+    "remote_financial_database_access": false,
+    "remote_migrations": false,
+    "production_data_changes": false,
+    "merge": false,
+    "deploy": false,
+    "push": false
+  },
+  "approval": {
+    "structural_audit": false,
+    "hotfix_013_standalone_ready": false,
+    "report": "docs/auditoria-estrutural-financeira.md"
+  },
+  "runtime": {
+    "node": "v24.19.0",
+    "postgres_native_package": "@embedded-postgres/linux-x64@17.10.0-beta.17",
+    "pg_node_module": "pg@8",
+    "browser": "Chromium /usr/bin/chromium"
+  },
+  "historical_migrations": [
+    {
+      "file": "202610010001_initial.sql",
+      "sha256": "fea49bfd80abbc99e9390656faedfa7ceb6ebcd6076449dbd6a1ead62e7f0914",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610010002_planning.sql",
+      "sha256": "241e59fcbe3887fa65038c00de87fbfc8e9155249e9369536d4f2aa52f3cbb9c",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610010003_planning_integrity.sql",
+      "sha256": "bf36251ce44a65b14a31e1f7ae627a35c7eb21d485a7625b0a354bf175e65899",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610020004_financial_clarity.sql",
+      "sha256": "05c7ffe81b577bb74e5a049228dd74293792b1e93cdc9d84267641d121a1549a",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610030005_investments.sql",
+      "sha256": "60a1aac05d1ba47b10550e127771c1d2d7bc679ddeed2bddde84c1379a407ea6",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610030006_card_corrections.sql",
+      "sha256": "cf7b33ee4d38fc86e6b36215514b907a9d973a405d14e9e7d006faaeccf9bfc9",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610050007_record_management.sql",
+      "sha256": "6755ddf8d7de240c7caebecdac4c39525e6b52663b332ea80c39653f5aaa3687",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610130008_commitment_evidence.sql",
+      "sha256": "dd1717bd2e65a86939a8ce537e5184009128be50a66589cd1a48dc3143e53b84",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610130009_cdi_terms.sql",
+      "sha256": "f18fb32a3b9cbdd43e6786792ec04a3dd4fb5f02cad1cd41fd061c4d2a6d6901",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610130010_investment_reconstruction.sql",
+      "sha256": "fccd2b86340f375811ed6bf122aeaee59b38fec307ad6d44e67f62e536206a70",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610130011_financial_export.sql",
+      "sha256": "2a78c6a48118b86058d9748a926e760c91ff0d2bd58df0525ee36b6819f60e41",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610140012_simple_investments.sql",
+      "sha256": "6f45769cc41f5d2bbb7f844cf2cc394f18343b8861ee0ea45a6a3b948cb5b2c5",
+      "unchanged_from_base": true
+    },
+    {
+      "file": "202610150013_recurring_occurrence_amounts.sql",
+      "sha256": "de5e420bf0b0a030180ae00556411e2af13d3f7e1f35b47f816915d9d751a950",
+      "unchanged_from_base": true
+    }
+  ],
+  "new_migration": {
+    "file": "supabase/migrations/202610150014_financial_boundaries.sql",
+    "sha256": "9308722ca447cefc70321072df36c1f887945231bc7ad05b5e4235aa0d5b2f9a",
+    "applied_only_in_disposable_local_databases": true,
+    "preserves_existing_bank_rows_and_occurrence_columns": true
+  },
+  "baseline_reproduction": {
+    "command": "node scripts/reproduce-financial-audit.mjs",
+    "units": "BRL cents",
+    "schema": "001–013",
+    "synthetic": true,
+    "remote_database": false,
+    "linkedPostedEdit": {
+      "bankBefore": 996000,
+      "bankAfter": 999000
+    },
+    "partialPaidFromChangedRuleAccount": true,
+    "oldDelete": {
+      "bankBefore": 995000,
+      "bankAfter": 996000
+    },
+    "changedCreationRetry": {
+      "bankBefore": 995000,
+      "bankAfter": 994000
+    },
+    "prepayment": [
+      {
+        "amount_cents": 25000,
+        "scheduled_date": "2026-10-13T00:00:00.000Z",
+        "obligation_amount_cents": 10000
+      }
+    ],
+    "advancePaymentRejected": true,
+    "changedCardAdjustmentReplayAcceptedWithoutApplyingNewValue": true,
+    "reclassifiedCapturedPlannedPayment": "income",
+    "pure_tests_against_base": {
+      "total": 6,
+      "failed": 6,
+      "log": "test-results/audit/base-structural-unit.log"
+    }
+  },
+  "verification": {
+    "global_final": {
+      "command": "npm test",
+      "status": "failed_in_ui",
+      "unit_suites": 10,
+      "database_suites": 8,
+      "ui_passed": 46,
+      "ui_failed": 1,
+      "ui_total": 47,
+      "ui_failure": "Retry after write error: success feedback not found within the wait deadline; focused rerun passed.",
+      "log": "test-results/audit/global-verified.log"
+    },
+    "structural_pure": {
+      "passed": 8,
+      "failed": 0
+    },
+    "structural_database": {
+      "subcases_passed": 12,
+      "total_with_parent": 13,
+      "failed": 0
+    },
+    "ui_isolated": {
+      "passed": 47,
+      "failed": 0,
+      "log": "test-results/audit/ui-threads.log"
+    },
+    "ui_failed_case_focused": {
+      "passed": 1,
+      "skipped": 29,
+      "log": "test-results/audit/ui-retry-focused.log"
+    },
+    "ui_profile": {
+      "pool": "threads",
+      "maxWorkers": 1,
+      "fileParallelism": false,
+      "timeout_ms": 5000,
+      "assertions_removed": false
+    },
+    "concurrency_final": {
+      "passed": 11,
+      "checks": [
+        "same recurring request concurrently: one debit, two successful exact replies",
+        "different requests for one full obligation: never two debits",
+        "concurrent partials cannot exceed amount owed",
+        "concurrent debt payments cannot exceed remaining principal",
+        "concurrent invoice payments cannot exceed invoice due",
+        "editing future rule and paying captured obligation preserve original expense",
+        "transfer request retries concurrently preserve one origin and destination movement",
+        "two balance reconciliations with the same expected balance reject the stale one",
+        "concurrent withdrawals with the same expected position cannot duplicate credit",
+        "concurrent reconciliation of an existing transfer adds one position and no bank debit",
+        "RLS across simultaneous A/B sessions and replay keys"
+      ],
+      "engine": "PostgreSQL 17.10 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit",
+      "host": "127.0.0.1",
+      "synthetic": true,
+      "remote_database": false,
+      "command": "PG_TEST_BIN=<local PostgreSQL 17 bin> PG_TEST_MODULE=<local pg module> npm run test:audit:concurrency",
+      "log": "test-results/audit/concurrency-serial.log"
+    },
+    "mobile_final": {
+      "passed": 70,
+      "checks": [
+        "375px criar cartão",
+        "investimento com taxa fixa, aporte, resgate e sincronização atômicos via UI/RLS",
+        "16 fluxos: criar/editar cartão, compra parcelada, fatura, pagamento, criar/editar dívida, pagamento, criar/editar recorrência, realizar/pular, reserva, receita/despesa, transferência, aporte, repetição atômica e conta lembrada",
+        "programada vencida não altera caixa; editar; confirmar uma vez; cancelar; parcela 8/14; ajuste negativo rastreável; configuração rápida",
+        "375px Home",
+        "375px Visão do mês",
+        "375px Programadas",
+        "375px Cartões",
+        "375px Dívidas e parcelas",
+        "375px Recorrentes",
+        "375px Reserva e investimentos",
+        "375px compra parcelada modal",
+        "375px investimento modal",
+        "375px Aportar em investimento formulário",
+        "375px Aportar em investimento confirmação",
+        "375px Resgatar investimento formulário",
+        "375px Resgatar investimento confirmação",
+        "375px exclusão confirmada",
+        "375px reconciliação de conta",
+        "375px diferença de saldo",
+        "375px pagamento dívida modal",
+        "390px Home",
+        "390px Visão do mês",
+        "390px Programadas",
+        "390px Cartões",
+        "390px Dívidas e parcelas",
+        "390px Recorrentes",
+        "390px Reserva e investimentos",
+        "390px compra parcelada modal",
+        "390px investimento modal",
+        "390px Aportar em investimento formulário",
+        "390px Aportar em investimento confirmação",
+        "390px Resgatar investimento formulário",
+        "390px Resgatar investimento confirmação",
+        "390px exclusão confirmada",
+        "390px reconciliação de conta",
+        "390px diferença de saldo",
+        "390px pagamento dívida modal",
+        "430px Home",
+        "430px Visão do mês",
+        "430px Programadas",
+        "430px Cartões",
+        "430px Dívidas e parcelas",
+        "430px Recorrentes",
+        "430px Reserva e investimentos",
+        "430px compra parcelada modal",
+        "430px investimento modal",
+        "430px Aportar em investimento formulário",
+        "430px Aportar em investimento confirmação",
+        "430px Resgatar investimento formulário",
+        "430px Resgatar investimento confirmação",
+        "430px exclusão confirmada",
+        "430px reconciliação de conta",
+        "430px diferença de saldo",
+        "430px pagamento dívida modal",
+        "375px Cemig quitada sem residual nem rótulo interno",
+        "375px pagamento parcial por regra canônica",
+        "375px pular ocorrência sem pagamento",
+        "375px previsão variável do próximo mês",
+        "375px reserva aposentada ausente e nova Caixinha preservada",
+        "390px Cemig quitada sem residual nem rótulo interno",
+        "390px pagamento parcial por regra canônica",
+        "390px pular ocorrência sem pagamento",
+        "390px previsão variável do próximo mês",
+        "390px reserva aposentada ausente e nova Caixinha preservada",
+        "430px Cemig quitada sem residual nem rótulo interno",
+        "430px pagamento parcial por regra canônica",
+        "430px pular ocorrência sem pagamento",
+        "430px previsão variável do próximo mês",
+        "430px reserva aposentada ausente e nova Caixinha preservada"
+      ],
+      "errors": [],
+      "outbound": [],
+      "backend": "PGlite com RLS authenticated e migrations 001–014; Auth e HTTP simulados; nenhum acesso remoto",
+      "command": "BROWSER_EXECUTABLE=/usr/bin/chromium npm run test:mobile",
+      "log": "test-results/audit/mobile-serial.log"
+    },
+    "typecheck": "passed",
+    "lint": "passed",
+    "build": "passed; bundle-size warning only",
+    "whitespace": "passed",
+    "previous_timing_failures": "Default forks UI and one-worker forks had nondeterministic timeouts (45/47). Simultaneous native/browser tests also timed out. Native and browser passed separately with original time limits. UI passed in threads with one worker; that profile is now the default, but the last full run still had one UI feedback wait failure (46/47); the focused case passed. Screenshot failure handler masked the earlier browser error; that error was not inferred as a financial defect."
+  },
+  "unresolved": [
+    "Legacy obligation terms/amounts and multi-installment allocations absent from historical records cannot be inferred safely.",
+    "Hosted Auth/PostgREST integration has not been exercised; local SQL roles and HTTP/auth mocks were used.",
+    "Safari and installed iOS PWA were not exercised.",
+    "The last global UI regression was not green (46/47); isolated reruns do not establish suite stability."
+  ]
+}

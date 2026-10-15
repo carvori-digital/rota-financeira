@@ -20,7 +20,10 @@ import {
   isLegacyReserveAccount,
   today,
 } from "../../utils/finance";
-import { occurrenceAmount } from "../recurring/calculations";
+import {
+  occurrenceAmount,
+  occurrenceDefinition,
+} from "../recurring/calculations";
 import { projection } from "./calculations";
 import { experienceReport } from "../experience/calculations";
 import { MonthReport } from "./MonthReport";
@@ -745,6 +748,8 @@ function PlanningEditor({
         });
         break;
       case "cardPayment":
+        if (!card || !action.invoice)
+          throw new Error("Fatura não encontrada. Atualize a tela.");
         await rpc("pay_card_invoice", {
           p_id: id,
           p_card: cardId,
@@ -772,6 +777,7 @@ function PlanningEditor({
         break;
       }
       case "debtPayment":
+        if (!debt) throw new Error("Dívida não encontrada. Atualize a tela.");
         await rpc("pay_debt", {
           p_id: id,
           p_debt: debtId,
@@ -832,7 +838,15 @@ function PlanningEditor({
       {action.kind === "occurrenceAmount" && (
         <>
           <p>
-            {rule?.name} · {action.due?.split("-").reverse().join("/")}
+            {rule && action.due
+              ? occurrenceDefinition(
+                  rule,
+                  action.due,
+                  plan.recurring_occurrences,
+                  data.transactions,
+                ).name
+              : rule?.name}{" "}
+            · {action.due?.split("-").reverse().join("/")}
           </p>
           <Amount hidden={hidden} value={action.amount ?? rule?.amount_cents} />
           <p className="muted">
@@ -844,7 +858,15 @@ function PlanningEditor({
       {action.kind === "occurrence" && (
         <>
           <p>
-            {rule?.name} · {action.due?.split("-").reverse().join("/")}
+            {rule && action.due
+              ? occurrenceDefinition(
+                  rule,
+                  action.due,
+                  plan.recurring_occurrences,
+                  data.transactions,
+                ).name
+              : rule?.name}{" "}
+            · {action.due?.split("-").reverse().join("/")}
           </p>
           <Field label="Ação">
             <select

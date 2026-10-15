@@ -34,7 +34,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/hotfix-reserva-cemig": false
+      "codex/hotfix-reserva-cemig": false,
+      "codex/auditoria-estrutural-financeira": false
     }
   }
 }

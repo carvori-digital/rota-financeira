@@ -76,9 +76,12 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
   );
   const income = monthly.reduce((n, m) => n + m.income, 0),
     expense = monthly.reduce((n, m) => n + m.expense, 0);
-  const obligations = months
+  const obligationRows = months
     .flatMap((month) => monthlyCommitments(s.finance, s.plan, asOf, month))
     .filter((c) => inPeriod(c.due));
+  const obligations = [
+    ...new Map(obligationRows.map((c) => [c.id, c])).values(),
+  ];
   const r = experienceReport(s.finance, s.plan, asOf);
   const scheduledIds = new Set(
       obligations
@@ -181,6 +184,18 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
               "payment_date",
             ]),
           ),
+        debt_payment_allocations: (s.plan.debt_payment_allocations ?? [])
+          .filter((a) => inPeriod(a.scheduled_date))
+          .map((a) =>
+            pick(a, [
+              ...base,
+              "payment_id",
+              "debt_id",
+              "scheduled_date",
+              "amount_cents",
+              "obligation_amount_cents",
+            ]),
+          ),
         debt_payments: s.plan.debt_payments
           .filter((t) => inPeriod(t.payment_date))
           .map((t) =>
@@ -203,6 +218,7 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
             pick(t, [
               ...base,
               "recurring_item_id",
+              "terms",
               "amount_cents",
               "due_date",
               "status",
@@ -290,6 +306,18 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
               "due_month",
             ]),
           ),
+          debt_payment_allocations: (s.plan.debt_payment_allocations ?? [])
+            .filter((a) => inPeriod(a.scheduled_date))
+            .map((a) =>
+              pick(a, [
+                ...base,
+                "payment_id",
+                "debt_id",
+                "scheduled_date",
+                "amount_cents",
+                "obligation_amount_cents",
+              ]),
+            ),
           debt_payments: s.plan.debt_payments.map((t) =>
             pick(t, [
               ...base,

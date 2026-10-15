@@ -274,7 +274,7 @@ export default function App() {
         );
         return;
       }
-      if (!rule.active) {
+      if (!rule.active && !occurrence) {
         setNotice("Recorrência pausada. Atualize a tela.");
         return;
       }
@@ -998,6 +998,14 @@ function EditorForm({
           p_rule: ruleId,
           p_payload: payload,
           p_existing: false,
+        });
+        closeWithMotion(() => void onSaved(String(payload.account_id)));
+        return;
+      }
+      if (editor.kind === "transaction" && !row) {
+        await rpc("create_financial_transaction", {
+          p_id: draftId,
+          p_payload: payload,
         });
         closeWithMotion(() => void onSaved(String(payload.account_id)));
         return;

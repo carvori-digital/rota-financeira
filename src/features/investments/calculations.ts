@@ -8,6 +8,7 @@ import type {
 import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData } from "../planning/types.ts";
 import { balanceSummary } from "../../utils/finance.ts";
+import { verifiedCardPayments } from "../cards/verifiedPayments.ts";
 import { invoices } from "../cards/calculations.ts";
 export function recordedInvestmentValue(
   investment: Investment,
@@ -127,9 +128,9 @@ export function wealthSummary(
   const debts = plan.debts.reduce((s, d) => s + d.remaining_amount_cents, 0);
   const cards = invoices(
     plan.credit_cards,
-    plan.card_purchases,
+    plan.card_purchases.filter((p) => p.purchase_date <= asOf),
     plan.card_invoices,
-    plan.card_payments,
+    verifiedCardPayments(data.transactions, plan.card_payments, asOf),
     plan.card_adjustments,
   ).reduce((s, i) => s + i.pending, 0);
   const gross = cash.total + positions.reduce((s, p) => s + p.current, 0);

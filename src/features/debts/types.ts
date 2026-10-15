@@ -20,3 +20,11 @@ export interface DebtPayment extends Base {
   payment_date: string;
   scheduled_date: string | null;
 }
+
+export interface DebtPaymentAllocation extends Base {
+  payment_id: string;
+  debt_id: string;
+  scheduled_date: string;
+  amount_cents: number;
+  obligation_amount_cents: number;
+}

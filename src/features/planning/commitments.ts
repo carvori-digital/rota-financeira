@@ -2,6 +2,7 @@ import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData, Commitment } from "./types.ts";
 import {
   occurrenceAmount,
+  occurrenceDefinition,
   occurrencePayments,
 } from "../recurring/calculations.ts";
 import { projection } from "./calculations.ts";
@@ -33,7 +34,19 @@ export function monthlyCommitments(
     references: string[] = [],
     completed = false,
   ) => {
-    if (belongs(c.due, !completed))
+    if (
+      belongs(c.due, !completed) ||
+      (completed &&
+        c.due < `${month}-01` &&
+        references.some((id) =>
+          data.transactions.some(
+            (t) =>
+              t.id === id &&
+              isRealized(t, asOf) &&
+              t.transaction_date.startsWith(month),
+          ),
+        ))
+    )
       result.set(c.id, {
         ...c,
         status: completed ? "completed" : "pending",
@@ -73,7 +86,15 @@ export function monthlyCommitments(
       });
     }
   for (const o of plan.recurring_occurrences) {
-    const r = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
+    const rule = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
+    const r =
+      rule &&
+      occurrenceDefinition(
+        rule,
+        o.due_date,
+        plan.recurring_occurrences,
+        data.transactions,
+      );
     if (
       !r ||
       r.type !== "expense" ||
@@ -118,8 +139,7 @@ export function monthlyCommitments(
         group: "fixed",
         canResolve:
           !!linked &&
-          (linked.status === "pending" ||
-            (r.active && paid > 0 && paid < expected)),
+          (linked.status === "pending" || (paid > 0 && paid < expected)),
       },
       paid,
       [o.id, ...paymentTransactions.map((t) => t.id)],
@@ -178,7 +198,13 @@ export function monthlyCommitments(
         name: `Fatura · ${card.name}`,
         due: i.due_date,
         amount: i.total,
-        impact: -i.pending,
+        impact:
+          card.payment_account_id === null ||
+          data.accounts.some(
+            (a) => a.id === card.payment_account_id && !isReserveAccount(a),
+          )
+            ? -i.pending
+            : 0,
         direction: "expense",
         group: "cards",
       },
@@ -189,9 +215,30 @@ export function monthlyCommitments(
       i.pending === 0,
     );
   }
+  const allocations = plan.debt_payment_allocations ?? [];
+  const debtEvidence = [
+    ...allocations.flatMap((a) => {
+      const p = plan.debt_payments.find((p) => p.id === a.payment_id);
+      return p && tx(p.transaction_id)?.amount_cents === p.amount_cents
+        ? [
+            {
+              ...p,
+              ...a,
+              transaction_id: p.transaction_id,
+              payment_date: p.payment_date,
+            },
+          ]
+        : [];
+    }),
+    ...plan.debt_payments.filter(
+      (p) =>
+        !allocations.some((a) => a.payment_id === p.id) &&
+        tx(p.transaction_id)?.amount_cents === p.amount_cents,
+    ),
+  ];
   for (const m of projection(data, plan, asOf))
     for (const c of m.items.filter((c) => c.source === "debt")) {
-      const paid = plan.debt_payments
+      const paid = debtEvidence
         .filter(
           (p) =>
             p.debt_id === c.entity &&
@@ -203,13 +250,9 @@ export function monthlyCommitments(
     }
   // Only payments with a captured obligation amount can establish historical
   // completion. No association is inferred from descriptions or current balance.
-  const groups = new Map<string, typeof plan.debt_payments>();
-  for (const p of plan.debt_payments)
-    if (
-      p.scheduled_date &&
-      tx(p.transaction_id)?.amount_cents === p.amount_cents &&
-      p.payment_date <= asOf
-    ) {
+  const groups = new Map<string, typeof debtEvidence>();
+  for (const p of debtEvidence)
+    if (p.scheduled_date && !!tx(p.transaction_id) && p.payment_date <= asOf) {
       const key = `debt:${p.debt_id}:${p.scheduled_date}`;
       groups.set(key, [...(groups.get(key) ?? []), p]);
     }
@@ -229,13 +272,19 @@ export function monthlyCommitments(
         name: d.name,
         due: ps[0].scheduled_date!,
         amount: expected,
-        impact: Math.min(0, paid - expected),
+        impact:
+          d.payment_account_id === null ||
+          data.accounts.some(
+            (a) => a.id === d.payment_account_id && !isReserveAccount(a),
+          )
+            ? Math.min(0, paid - expected)
+            : 0,
         direction: "expense",
         group: "debts",
         canResolve: d.next_due_date === ps[0].scheduled_date,
       },
       paid,
-      ps.map((p) => p.id),
+      [...new Set(ps.map((p) => p.transaction_id))],
       paid >= expected,
     );
   }

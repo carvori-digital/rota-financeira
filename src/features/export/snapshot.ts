@@ -34,6 +34,7 @@ const planTables = [
   "card_adjustments",
   "debts",
   "debt_payments",
+  "debt_payment_allocations",
   "reserve_account_links",
   "investments",
   "investment_movements",

@@ -9,8 +9,10 @@ import { addMonths } from "./dates.ts";
 import {
   recurringDates,
   occurrenceAmount,
+  occurrenceDefinition,
   occurrencePayments,
 } from "../recurring/calculations.ts";
+import { verifiedCardPayments } from "../cards/verifiedPayments.ts";
 import { invoices } from "../cards/calculations.ts";
 import { debtInstallments } from "../debts/calculations.ts";
 export function projection(
@@ -22,12 +24,22 @@ export function projection(
   const all: Commitment[] = [];
   const cash = (id: string | null) =>
     data.accounts.some((a) => a.id === id && !isReserveAccount(a));
-  for (const r of plan.recurring_items)
-    for (const due of recurringDates(r, through, plan.recurring_occurrences))
+  for (const rule of plan.recurring_items)
+    for (const due of recurringDates(
+      rule,
+      through,
+      plan.recurring_occurrences,
+    )) {
+      const r = occurrenceDefinition(
+        rule,
+        due,
+        plan.recurring_occurrences,
+        data.transactions,
+      );
       all.push({
         id: `${r.id}:${due}`,
         source: "recurring",
-        canResolve: due <= asOf,
+        canResolve: true,
         entity: r.id,
         name: r.name,
         due,
@@ -50,10 +62,19 @@ export function projection(
           : 0,
         direction: r.type,
       });
+    }
   for (const o of plan.recurring_occurrences.filter(
     (o) => o.status === "recorded",
   )) {
-    const r = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
+    const rule = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
+    const r =
+      rule &&
+      occurrenceDefinition(
+        rule,
+        o.due_date,
+        plan.recurring_occurrences,
+        data.transactions,
+      );
     const linked = data.transactions.find((t) => t.id === o.transaction_id);
     if (
       !r ||
@@ -90,14 +111,14 @@ export function projection(
         ? remaining * (r.type === "income" ? 1 : -1)
         : 0,
       direction: r.type,
-      canResolve: r.active && o.due_date <= asOf,
+      canResolve: true,
     });
   }
   for (const i of invoices(
     plan.credit_cards,
     plan.card_purchases,
     plan.card_invoices,
-    plan.card_payments,
+    verifiedCardPayments(data.transactions, plan.card_payments, asOf),
     plan.card_adjustments,
   )) {
     if (i.pending === 0 || i.due_date > through) continue;
@@ -138,6 +159,75 @@ export function projection(
           : 0,
         direction: "expense",
       });
+  // A recorded partial obligation survives pausing its source configuration.
+  const allocated = plan.debt_payment_allocations ?? [];
+  const evidence = [
+    ...allocated.flatMap((a) => {
+      const p = plan.debt_payments.find((p) => p.id === a.payment_id);
+      return p &&
+        data.transactions.some(
+          (t) =>
+            t.id === p.transaction_id &&
+            t.amount_cents === p.amount_cents &&
+            isRealized(t, asOf),
+        )
+        ? [{ ...a, transaction_id: p.transaction_id }]
+        : [];
+    }),
+    ...plan.debt_payments.filter(
+      (p) =>
+        !allocated.some((a) => a.payment_id === p.id) &&
+        p.scheduled_date &&
+        p.obligation_amount_cents &&
+        data.transactions.some(
+          (t) =>
+            t.id === p.transaction_id &&
+            t.amount_cents === p.amount_cents &&
+            isRealized(t, asOf),
+        ),
+    ),
+  ];
+  const known = new Map<
+    string,
+    { debt: string; due: string; amount: number; paid: number }
+  >();
+  for (const p of evidence) {
+    if (!p.scheduled_date || !p.obligation_amount_cents) continue;
+    const key = `${p.debt_id}:${p.scheduled_date}`,
+      old = known.get(key);
+    known.set(key, {
+      debt: p.debt_id,
+      due: p.scheduled_date,
+      amount: Math.max(old?.amount ?? 0, p.obligation_amount_cents),
+      paid: (old?.paid ?? 0) + p.amount_cents,
+    });
+  }
+  for (const p of known.values()) {
+    const d = plan.debts.find((d) => d.id === p.debt);
+    if (
+      !d ||
+      p.paid >= p.amount ||
+      all.some(
+        (c) => c.source === "debt" && c.entity === p.debt && c.due === p.due,
+      )
+    )
+      continue;
+    const amount = p.amount - p.paid;
+    all.push({
+      id: `${d.id}:${p.due}`,
+      source: "debt",
+      entity: d.id,
+      name: d.name,
+      due: p.due,
+      amount,
+      impact:
+        d.payment_account_id === null || cash(d.payment_account_id)
+          ? -amount
+          : 0,
+      direction: "expense",
+      canResolve: d.next_due_date === p.due,
+    });
+  }
   for (const t of data.transactions.filter(
     (t) =>
       t.type !== "adjustment" &&
@@ -173,7 +263,8 @@ export function projection(
         (a) => a.id === t.account_id && isReserveAccount(a),
       ),
       name: t.description || "Lançamento previsto",
-      due: occurrence?.due_date ?? t.transaction_date,
+      due: occurrence?.due_date ?? t.commitment_due_date ?? t.transaction_date,
+      cashDate: t.transaction_date,
       amount: t.amount_cents,
       impact,
       direction:
@@ -190,7 +281,13 @@ export function projection(
   return Array.from({ length: 4 }, (_, i) => {
     const month = addMonths(`${asOf.slice(0, 7)}-01`, i).slice(0, 7);
     const items = all
-      .filter((c) => (c.due < asOf ? asOf : c.due).slice(0, 7) === month)
+      .filter(
+        (c) =>
+          ((c.cashDate ?? c.due) < asOf ? asOf : (c.cashDate ?? c.due)).slice(
+            0,
+            7,
+          ) === month,
+      )
       .sort((a, b) => a.due.localeCompare(b.due));
     const sum = (f: (c: Commitment) => boolean) =>
       items.filter(f).reduce((s, c) => s + Math.abs(c.impact), 0);

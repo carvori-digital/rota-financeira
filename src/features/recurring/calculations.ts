@@ -14,19 +14,31 @@ export function recurringDates(
       .map((o) => o.due_date),
   );
   const dates: string[] = [];
-  if (!rule.active) return dates;
-  for (let i = 0; ; i++) {
-    const date =
-      rule.frequency === "weekly"
-        ? addDays(rule.start_date, i * 7)
-        : addMonths(
-            rule.start_date,
-            i * (rule.frequency === "yearly" ? 12 : 1),
-          );
-    if (date > through || (rule.end_date && date > rule.end_date)) break;
-    if (!resolved.has(date)) dates.push(date);
-  }
-  return dates;
+  if (rule.active)
+    for (let i = 0; ; i++) {
+      const date =
+        rule.frequency === "weekly"
+          ? addDays(rule.start_date, i * 7)
+          : addMonths(
+              rule.start_date,
+              i * (rule.frequency === "yearly" ? 12 : 1),
+            );
+      if (date > through || (rule.end_date && date > rule.end_date)) break;
+      if (!resolved.has(date)) dates.push(date);
+    }
+  return [
+    ...new Set([
+      ...dates,
+      ...completed
+        .filter(
+          (o) =>
+            o.recurring_item_id === rule.id &&
+            o.status === "planned" &&
+            o.due_date <= through,
+        )
+        .map((o) => o.due_date),
+    ]),
+  ].sort();
 }
 export function essentialMonthly(rules: RecurringItem[], asOf: string) {
   return Math.round(
@@ -88,4 +100,35 @@ export function occurrencePayments(
   return transactions.filter(
     (t) => ids.has(t.id) && t.type === type && isRealized(t, asOf),
   );
+}
+
+export function occurrenceDefinition(
+  rule: RecurringItem,
+  due: string,
+  occurrences: RecurringOccurrence[],
+  transactions: Transaction[] = [],
+): RecurringItem {
+  const o = occurrences.find(
+    (o) => o.recurring_item_id === rule.id && o.due_date === due,
+  );
+  if (o?.terms)
+    return {
+      ...rule,
+      ...o.terms,
+      name: o.terms.name || "Ocorrência recorrente",
+      frequency: o.terms.frequency ?? rule.frequency,
+    };
+  const t =
+    o?.status === "recorded"
+      ? transactions.find((t) => t.id === o.transaction_id)
+      : undefined;
+  return t && (t.type === "income" || t.type === "expense")
+    ? {
+        ...rule,
+        name: t.description || "Ocorrência recorrente",
+        type: t.type,
+        account_id: t.account_id,
+        category_id: t.category_id ?? rule.category_id,
+      }
+    : rule;
 }

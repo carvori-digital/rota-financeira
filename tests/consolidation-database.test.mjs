@@ -106,11 +106,11 @@ test("consolidação: patrimônio, movimentos atômicos, compras corrigíveis e 
       async () => {
         const id = randomUUID();
         await q(
-          "select record_investment_movement($1,$2,'contribution',2000,'2026-10-03',$3,'aporte')",
+          "select simple_investment_movement($1,$2,'contribution',2000,'2026-10-03',$3,'aporte',null,51000,true)",
           [id, investment.id, account.id],
         );
         await q(
-          "select record_investment_movement($1,$2,'contribution',2000,'2026-10-03',$3,'aporte')",
+          "select simple_investment_movement($1,$2,'contribution',2000,'2026-10-03',$3,'aporte',null,51000,true)",
           [id, investment.id, account.id],
         );
         assert.equal(
@@ -135,7 +135,7 @@ test("consolidação: patrimônio, movimentos atômicos, compras corrigíveis e 
           ),
         );
         await q(
-          "select record_investment_movement($1,$2,'withdrawal',1000,'2026-10-03',$3,'resgate')",
+          "select simple_investment_movement($1,$2,'withdrawal',1000,'2026-10-03',$3,'resgate',null,53000,true)",
           [randomUUID(), investment.id, account.id],
         );
         assert.equal(
@@ -149,7 +149,7 @@ test("consolidação: patrimônio, movimentos atômicos, compras corrigíveis e 
           52000,
         );
         await q(
-          "select record_investment_movement($1,$2,'adjustment',52100,'2026-10-03',null,'saldo real')",
+          "select simple_investment_movement($1,$2,'adjustment',52100,'2026-10-03',null,'saldo real',null,52000,true)",
           [randomUUID(), investment.id],
         );
         assert.equal(
@@ -164,13 +164,13 @@ test("consolidação: patrimônio, movimentos atômicos, compras corrigíveis e 
         );
         await assert.rejects(
           q(
-            "select record_investment_movement($1,$2,'withdrawal',53000,'2026-10-03',$3,'excesso')",
+            "select simple_investment_movement($1,$2,'withdrawal',53000,'2026-10-03',$3,'excesso',null,52100,true)",
             [randomUUID(), investment.id, account.id],
           ),
         );
         await assert.rejects(
           q(
-            "select record_investment_movement($1,$2,'contribution',1000000,'2026-10-03',$3,'excesso')",
+            "select simple_investment_movement($1,$2,'contribution',1000000,'2026-10-03',$3,'excesso',null,52100,true)",
             [randomUUID(), investment.id, account.id],
           ),
         );
@@ -325,7 +325,7 @@ test("consolidação: patrimônio, movimentos atômicos, compras corrigíveis e 
       );
       await assert.rejects(
         q(
-          "select record_investment_movement($1,$2,'adjustment',1,'2026-10-03',null,'forjado')",
+          "select simple_investment_movement($1,$2,'adjustment',1,'2026-10-03',null,'forjado',null,0,true)",
           [randomUUID(), investment.id],
         ),
       );

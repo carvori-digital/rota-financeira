@@ -81,8 +81,17 @@ test("007: exclusões atômicas, dependências e isolamento", async (t) => {
     const movement = async (i, type, amount) => {
       const id = randomUUID();
       await q(
-        "select record_investment_movement($1,$2,$3,$4,'2026-10-05',$5,'Teste local')",
-        [id, i, type, amount, type === "adjustment" ? null : account],
+        "select simple_investment_movement($1,$2,$3,$4,'2026-10-05',$5,'Conferido: Teste local',null,$6,true)",
+        [
+          id,
+          i,
+          type,
+          amount,
+          type === "adjustment" ? null : account,
+          Number(
+            (await q("select investment_value($1,'2026-10-05') v", [i]))[0].v,
+          ),
+        ],
       );
       return id;
     };
@@ -262,15 +271,22 @@ test("007: exclusões atômicas, dependências e isolamento", async (t) => {
       "withdrawal",
     ])
       await t.test(
-        `investimento manual ${scenario}: remove apenas movimentos e transações vinculadas`,
+        `investimento manual ${scenario}: remove posição e preserva transações bancárias`,
         async () => {
-          const before = await q("select * from transactions order by id"),
-            i = await investment();
+          const i = await investment();
           if (scenario === "adjustment") await movement(i, "adjustment", 2000);
           if (["contribution", "withdrawal"].includes(scenario))
             await movement(i, "contribution", 2000);
           if (scenario === "withdrawal") await movement(i, "withdrawal", 500);
-          await q("select delete_investment($1)", [i]);
+          const before = await q("select * from transactions order by id");
+          const expected = Number(
+            (await q("select investment_value($1,'2026-10-05') v", [i]))[0].v,
+          );
+          await q("select delete_simple_investment($1,$2,$3,true)", [
+            randomUUID(),
+            i,
+            expected,
+          ]);
           assert.equal(
             (await q("select * from investments where id=$1", [i])).length,
             0,
@@ -291,7 +307,7 @@ test("007: exclusões atômicas, dependências e isolamento", async (t) => {
         },
       );
     await t.test(
-      "investimento migrado e vínculo inesperado bloqueados atomicamente",
+      "rota antiga desativada e vínculo inesperado bloqueados atomicamente",
       async () => {
         await db.exec("reset role");
         const migrated = (
@@ -304,7 +320,7 @@ test("007: exclusões atômicas, dependências e isolamento", async (t) => {
         await rejectsUnchanged(
           "select delete_investment($1)",
           [migrated],
-          /migrado/,
+          /antiga desativada/,
         );
         const i = await investment(),
           m = await movement(i, "contribution", 100);
@@ -322,8 +338,14 @@ test("007: exclusões atômicas, dependências e isolamento", async (t) => {
         );
         await as(user);
         await rejectsUnchanged(
-          "select delete_investment($1)",
-          [i],
+          "select delete_simple_investment($1,$2,$3,true)",
+          [
+            randomUUID(),
+            i,
+            Number(
+              (await q("select investment_value($1,'2026-10-05') v", [i]))[0].v,
+            ),
+          ],
           /outros registros/,
         );
       },

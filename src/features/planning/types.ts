@@ -26,6 +26,7 @@ export interface PlanningData {
   investment_movements?: InvestmentMovement[];
   classification_reviews?: ClassificationReview[];
   card_adjustments?: CardAdjustment[];
+  debt_payment_allocations?: import("../debts/types.ts").DebtPaymentAllocation[];
   recurring_payments?: import("../recurring/types.ts").RecurringPayment[];
   recurring_items: RecurringItem[];
   recurring_occurrences: RecurringOccurrence[];
@@ -45,6 +46,7 @@ export const emptyPlanning: PlanningData = {
   classification_reviews: [],
   card_adjustments: [],
   recurring_payments: [],
+  debt_payment_allocations: [],
   recurring_items: [],
   recurring_occurrences: [],
   credit_cards: [],
@@ -66,6 +68,7 @@ export interface Commitment {
   entity: string;
   name: string;
   due: string;
+  cashDate?: string;
   amount: number;
   impact: number;
   direction: "income" | "expense" | "transfer";

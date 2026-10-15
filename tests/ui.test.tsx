@@ -376,6 +376,37 @@ vi.mock("../src/lib/supabase", () => ({
       },
     },
     rpc: async (name: string, args: Row) => {
+      if (name === "create_financial_transaction") {
+        if (backend.writeError)
+          return { data: null, error: { message: "network" } };
+        const payload = args.p_payload as Row;
+        const previous = backend.rows.transactions.find(
+          (t) => t.id === args.p_id,
+        );
+        if (
+          previous &&
+          Object.entries(payload).some(([k, v]) => previous[k] !== v)
+        )
+          return {
+            data: null,
+            error: { message: "Requisição já utilizada com outros parâmetros" },
+          };
+        const written = {
+          user_id: "user-a",
+          created_at: new Date().toISOString(),
+          ...payload,
+          id: args.p_id,
+        };
+        backend.writes.push(written);
+        if (!previous) backend.rows.transactions.push(written);
+        const lost = backend.lostResponse;
+        backend.lostResponse = false;
+        return {
+          data: args.p_id,
+          error: lost ? { message: "lost response" } : null,
+        };
+      }
+
       backend.writes.push({ rpc: name, ...args });
       if (name === "resolve_transaction") {
         const t = backend.rows.transactions.find((t) => t.id === args.p_id);
@@ -505,6 +536,7 @@ beforeEach(() => {
     recurring_items: [],
     recurring_occurrences: [],
     recurring_payments: [],
+    debt_payment_allocations: [],
     credit_cards: [],
     card_purchases: [],
     card_invoices: [],

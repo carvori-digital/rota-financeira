@@ -221,11 +221,11 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
       async () => {
         const sync = randomUUID();
         await q(
-          "select record_investment_movement($1,$2,'adjustment',16000,'2026-10-13',null,'Real')",
+          "select simple_investment_movement($1,$2,'adjustment',16000,'2026-10-13',null,'Real',null,15500,true)",
           [sync, replacement],
         );
         await q(
-          "select record_investment_movement($1,$2,'adjustment',16000,'2026-10-13',null,'Real')",
+          "select simple_investment_movement($1,$2,'adjustment',16000,'2026-10-13',null,'Real',null,15500,true)",
           [sync, replacement],
         );
         assert.equal(
@@ -240,7 +240,7 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
         );
         const id = randomUUID();
         await q(
-          "select record_investment_movement($1,$2,'contribution',1000,'2026-10-13',$3,'Real')",
+          "select simple_investment_movement($1,$2,'contribution',1000,'2026-10-13',$3,'Real',null,16000,true)",
           [id, replacement, cash.id],
         );
         assert.equal(
@@ -260,7 +260,7 @@ test("sprint03: additive migrations, reconstruction accounting, CDI and tenant i
         );
         await assert.rejects(
           q(
-            "select record_investment_movement($1,$2,'withdrawal',18000,'2026-10-13',$3,'Too much')",
+            "select simple_investment_movement($1,$2,'withdrawal',18000,'2026-10-13',$3,'Too much',null,17000,true)",
             [randomUUID(), replacement, cash.id],
           ),
         );

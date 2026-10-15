@@ -16,6 +16,10 @@ export interface RecurringOccurrence extends Base {
   due_date: string;
   status: "planned" | "recorded" | "skipped";
   amount_cents?: number | null;
+  terms?: Pick<
+    RecurringItem,
+    "name" | "type" | "account_id" | "category_id"
+  > & { frequency: RecurringItem["frequency"] | null };
   transaction_id: string | null;
 }
 
