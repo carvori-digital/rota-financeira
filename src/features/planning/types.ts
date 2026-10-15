@@ -26,6 +26,7 @@ export interface PlanningData {
   investment_movements?: InvestmentMovement[];
   classification_reviews?: ClassificationReview[];
   card_adjustments?: CardAdjustment[];
+  recurring_payments?: import("../recurring/types.ts").RecurringPayment[];
   recurring_items: RecurringItem[];
   recurring_occurrences: RecurringOccurrence[];
   credit_cards: CreditCard[];
@@ -43,6 +44,7 @@ export const emptyPlanning: PlanningData = {
   investment_movements: [],
   classification_reviews: [],
   card_adjustments: [],
+  recurring_payments: [],
   recurring_items: [],
   recurring_occurrences: [],
   credit_cards: [],
@@ -54,6 +56,9 @@ export const emptyPlanning: PlanningData = {
   reserve_account_links: [],
 };
 export interface Commitment {
+  transactionId?: string;
+  occurrenceId?: string;
+  reserveAccount?: boolean;
   canResolve?: boolean;
   group?: "fixed" | "scheduled" | "cards" | "debts" | "other";
   id: string;

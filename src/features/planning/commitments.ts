@@ -1,7 +1,11 @@
 import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData, Commitment } from "./types.ts";
+import {
+  occurrenceAmount,
+  occurrencePayments,
+} from "../recurring/calculations.ts";
 import { projection } from "./calculations.ts";
-import { isRealized } from "../../utils/finance.ts";
+import { isRealized, isReserveAccount } from "../../utils/finance.ts";
 import { invoices } from "../cards/calculations.ts";
 
 export interface MonthlyCommitment extends Commitment {
@@ -58,7 +62,7 @@ export function monthlyCommitments(
       )
         continue;
       const o = plan.recurring_occurrences.find(
-        (o) => o.transaction_id === c.entity,
+        (o) => o.transaction_id === c.transactionId,
       );
       put({
         ...c,
@@ -74,28 +78,52 @@ export function monthlyCommitments(
       !r ||
       r.type !== "expense" ||
       o.status === "skipped" ||
+      o.status === "planned" ||
       data.transactions.find((t) => t.id === o.transaction_id)?.status ===
         "cancelled"
     )
       continue;
-    const t = tx(o.transaction_id);
-    const paid = t?.type === "expense" ? t.amount_cents : 0;
+    const paymentTransactions = occurrencePayments(
+      o,
+      r.type,
+      data.transactions,
+      plan.recurring_payments ?? [],
+      asOf,
+    );
+    const paid = paymentTransactions.reduce((s, t) => s + t.amount_cents, 0);
+    const expected = occurrenceAmount(
+      r,
+      o.due_date,
+      plan.recurring_occurrences,
+      data.transactions,
+    );
+    const account = data.accounts.find((a) => a.id === r.account_id);
+    const linked = data.transactions.find((t) => t.id === o.transaction_id);
     put(
       {
         id: `recurring:${r.id}:${o.due_date}`,
         source: "recurring",
-        entity: o.transaction_id ?? r.id,
+        entity: r.id,
+        transactionId: o.transaction_id ?? undefined,
+        occurrenceId: o.id,
         name: r.name,
         due: o.due_date,
-        amount: r.amount_cents,
-        impact: -Math.max(0, r.amount_cents - paid),
+        amount: expected,
+        impact:
+          account && !isReserveAccount(account)
+            ? Math.min(0, paid - expected)
+            : 0,
+        reserveAccount: !!account && isReserveAccount(account),
         direction: "expense",
         group: "fixed",
-        canResolve: !!o.transaction_id,
+        canResolve:
+          !!linked &&
+          (linked.status === "pending" ||
+            (r.active && paid > 0 && paid < expected)),
       },
       paid,
-      o.transaction_id ? [o.id, o.transaction_id] : [o.id],
-      paid >= r.amount_cents,
+      [o.id, ...paymentTransactions.map((t) => t.id)],
+      expected > 0 && paid >= expected,
     );
   }
   for (const t of data.transactions) {
@@ -104,7 +132,8 @@ export function monthlyCommitments(
       !t.financial_commitment ||
       !isRealized(t, asOf) ||
       t.payment_reference ||
-      plan.recurring_occurrences.some((o) => o.transaction_id === t.id)
+      plan.recurring_occurrences.some((o) => o.transaction_id === t.id) ||
+      (plan.recurring_payments ?? []).some((p) => p.transaction_id === t.id)
     )
       continue;
     put(
@@ -200,7 +229,7 @@ export function monthlyCommitments(
         name: d.name,
         due: ps[0].scheduled_date!,
         amount: expected,
-        impact: -Math.max(0, expected - paid),
+        impact: Math.min(0, paid - expected),
         direction: "expense",
         group: "debts",
         canResolve: d.next_due_date === ps[0].scheduled_date,

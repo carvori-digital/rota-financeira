@@ -85,9 +85,10 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
         .filter((c) => c.source === "transaction")
         .map((c) => c.entity),
     ),
-    recurringIds = new Set(
-      s.plan.recurring_occurrences.map((o) => o.transaction_id),
-    );
+    recurringIds = new Set([
+      ...s.plan.recurring_occurrences.map((o) => o.transaction_id),
+      ...(s.plan.recurring_payments ?? []).map((p) => p.transaction_id),
+    ]);
   const realizedExpenses = tx.filter(
     (t) => t.type === "expense" && isRealized(t, asOf),
   );
@@ -193,12 +194,16 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
               "obligation_amount_cents",
             ]),
           ),
+        recurring_payments: (s.plan.recurring_payments ?? [])
+          .filter((p) => tx.some((t) => t.id === p.transaction_id))
+          .map((p) => pick(p, [...base, "occurrence_id", "transaction_id"])),
         recurring_occurrences: s.plan.recurring_occurrences
           .filter((t) => inPeriod(t.due_date))
           .map((t) =>
             pick(t, [
               ...base,
               "recurring_item_id",
+              "amount_cents",
               "due_date",
               "status",
               "transaction_id",
@@ -395,18 +400,20 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
         : null,
       observed_savings_rate: income > 0 ? (income - expense) / income : null,
     },
-    accounts: s.finance.accounts.map((a) => ({
-      ...pick(a, [
-        ...base,
-        "name",
-        "type",
-        "currency",
-        "initial_balance_cents",
-        "is_active",
-        "investment_id",
-      ]),
-      current_balance_cents: balance(a, s.finance.transactions, asOf),
-    })),
+    accounts: s.finance.accounts
+      .filter((a) => !a.investment_id && !a.investment_retired)
+      .map((a) => ({
+        ...pick(a, [
+          ...base,
+          "name",
+          "type",
+          "currency",
+          "initial_balance_cents",
+          "is_active",
+          "investment_id",
+        ]),
+        current_balance_cents: balance(a, s.finance.transactions, asOf),
+      })),
     categories: s.finance.categories.map((c) =>
       pick(c, ["id", "name", "type"]),
     ),

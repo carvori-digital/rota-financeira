@@ -31,7 +31,11 @@ export function CommitmentRow({
           {c.due < today() && !("status" in c && c.status === "completed")
             ? " · vencido"
             : ""}
-          {c.impact === 0 ? " · conta de reserva / transferência interna" : ""}
+          {c.direction === "transfer"
+            ? " · transferência interna"
+            : c.reserveAccount
+              ? " · conta de reserva"
+              : ""}
         </small>
       </div>
       <div className="row-end">

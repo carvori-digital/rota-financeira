@@ -504,6 +504,7 @@ beforeEach(() => {
     goal_contributions: [],
     recurring_items: [],
     recurring_occurrences: [],
+    recurring_payments: [],
     credit_cards: [],
     card_purchases: [],
     card_invoices: [],
@@ -1257,6 +1258,86 @@ describe("clareza financeira integrada", () => {
     );
     expect((screen.getByLabelText("Tipo") as HTMLSelectElement).value).toBe(
       "income",
+    );
+  });
+});
+
+describe("hotfix: vínculo canônico na ação do compromisso", () => {
+  it("transação recorrente pendente abre sua confirmação sem procurar regra pelo id do pagamento", async () => {
+    const due = today();
+    backend.rows.recurring_items = [
+      {
+        id: "rule-cemig",
+        user_id: "user-a",
+        name: "Cemig hotfix",
+        type: "expense",
+        amount_cents: 39678,
+        account_id: "a",
+        category_id: "c",
+        frequency: "monthly",
+        start_date: due,
+        active: true,
+        end_date: null,
+        is_essential: true,
+      },
+    ];
+    backend.rows.transactions = [
+      {
+        id: "tx-cemig",
+        user_id: "user-a",
+        type: "expense",
+        account_id: "a",
+        category_id: "c",
+        amount_cents: 39678,
+        description: "Cemig hotfix",
+        transaction_date: due,
+        status: "pending",
+        is_recurring: true,
+      },
+    ];
+    backend.rows.recurring_occurrences = [
+      {
+        id: "occ-cemig",
+        user_id: "user-a",
+        recurring_item_id: "rule-cemig",
+        transaction_id: "tx-cemig",
+        due_date: due,
+        status: "recorded",
+        amount_cents: 39678,
+      },
+    ];
+    const user = await open();
+    await user.click(
+      within(screen.getByRole("navigation")).getByRole("button", {
+        name: "Planejar",
+        exact: true,
+      }),
+    );
+    const summary = screen
+      .getByText("Fixas", { exact: true })
+      .closest("summary")!;
+    await user.click(summary);
+    const row = within(summary.parentElement!)
+      .getByText("Cemig hotfix", { exact: true })
+      .closest(".commitment-row")!;
+    await user.click(
+      within(row as HTMLElement).getByRole("button", {
+        name: "Marcar pago",
+        exact: true,
+      }),
+    );
+    await screen.findByRole("dialog", { name: "Confirmar lançamento" });
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await waitFor(() =>
+      expect(backend.rows.transactions[0].status).toBe("realized"),
+    );
+    expect(
+      backend.writes.filter((w) => w.rpc === "resolve_transaction"),
+    ).toEqual([expect.objectContaining({ p_id: "tx-cemig", p_cancel: false })]);
+    expect(backend.writes.some((w) => w.rpc === "resolve_recurring")).toBe(
+      false,
     );
   });
 });

@@ -14,7 +14,13 @@ import { DebtsPanel } from "../debts/components";
 import { RecurringPanel } from "../recurring/components";
 import { firstInvoiceDate, invoices } from "../cards/calculations";
 import { monthDay } from "./dates";
-import { balance, isReserveAccount, today } from "../../utils/finance";
+import {
+  balance,
+  isReserveAccount,
+  isLegacyReserveAccount,
+  today,
+} from "../../utils/finance";
+import { occurrenceAmount } from "../recurring/calculations";
 import { projection } from "./calculations";
 import { experienceReport } from "../experience/calculations";
 import { MonthReport } from "./MonthReport";
@@ -24,6 +30,7 @@ export type PlanningAction = {
   kind:
     | "installment"
     | "occurrence"
+    | "occurrenceAmount"
     | "card"
     | "purchase"
     | "purchaseAdjustment"
@@ -34,6 +41,7 @@ export type PlanningAction = {
     | "recurring"
     | "reserve";
   due?: string;
+  amount?: number;
   initialType?: "income" | "expense";
   card?: CreditCard;
   purchase?: CardPurchase;
@@ -93,16 +101,15 @@ export function PlanningWorkspace(props: Props) {
   const { reserveGoal, cost, selected, protectedMonths } = overview;
   const months = overview.targetMonths,
     actual = overview.reserve;
-  const reserveAccounts = data.accounts.filter(
-    (a) => !a.investment_id && isReserveAccount(a),
-  );
+  const reserveAccounts = data.accounts.filter(isLegacyReserveAccount);
   const legacy = data.transactions.filter(
     (t) =>
       t.is_recurring &&
       t.type !== "transfer" &&
       t.type !== "card_payment" &&
       !t.payment_reference &&
-      !plan.recurring_occurrences.some((o) => o.transaction_id === t.id),
+      !plan.recurring_occurrences.some((o) => o.transaction_id === t.id) &&
+      !(plan.recurring_payments ?? []).some((p) => p.transaction_id === t.id),
   );
   return (
     <>
@@ -304,6 +311,9 @@ export function PlanningWorkspace(props: Props) {
                   transactions={data.transactions}
                   money={money}
                   onEdit={(rule) => setAction({ kind: "recurring", rule })}
+                  onAmount={(rule, due, amount) =>
+                    setAction({ kind: "occurrenceAmount", rule, due, amount })
+                  }
                   onToggle={(r) =>
                     void run(() =>
                       save(
@@ -502,6 +512,7 @@ function PlanningEditor({
     [kind, setKind] = useState<"income" | "expense">(
       action.rule?.type ?? action.initialType ?? "expense",
     );
+  const [resolution, setResolution] = useState("realize");
   const [cardId, setCardId] = useState(
     action.purchase?.card_id ??
       action.card?.id ??
@@ -513,7 +524,9 @@ function PlanningEditor({
       plan.debts.find((d) => d.remaining_amount_cents > 0)?.id ??
       "",
   );
-  const accounts = data.accounts.filter((a) => a.is_active),
+  const accounts = data.accounts.filter(
+      (a) => a.is_active && !a.investment_id && !a.investment_retired,
+    ),
     card = plan.credit_cards.find((c) => c.id === cardId),
     debt = plan.debts.find((d) => d.id === debtId),
     rule = action.rule;
@@ -521,9 +534,7 @@ function PlanningEditor({
     !!action.debt &&
     plan.debt_payments.some((p) => p.debt_id === action.debt?.id);
   const reserveGoal = data.goals.find((g) => g.is_emergency_reserve),
-    reserveAccounts = data.accounts.filter(
-      (a) => !a.investment_id && isReserveAccount(a),
-    );
+    reserveAccounts = data.accounts.filter(isLegacyReserveAccount);
   const currentInvoice = invoices(
     plan.credit_cards,
     plan.card_purchases,
@@ -534,6 +545,7 @@ function PlanningEditor({
   const title = {
     installment: "Cadastrar parcelamento existente",
     occurrence: "Realizar ou pular ocorrência",
+    occurrenceAmount: "Ajustar previsão desta ocorrência",
     card: action.card ? "Editar cartão" : "Adicionar cartão",
     purchase: action.purchase ? "Editar compra" : "Compra no cartão",
     purchaseAdjustment: "Ajuste rastreável de fatura",
@@ -618,13 +630,34 @@ function PlanningEditor({
     };
     const id = request.current;
     switch (action.kind) {
-      case "occurrence":
-        await rpc("resolve_recurring", {
-          p_id: id,
-          p_rule: rule!.id,
+      case "occurrenceAmount":
+        if (!rule || !action.due)
+          throw new Error("Recorrência não encontrada. Atualize a tela.");
+        await rpc("set_recurring_occurrence_amount", {
+          p_rule: rule.id,
           p_due: action.due,
-          p_skip: text(f, "resolution") === "skip",
+          p_amount: amount(),
         });
+        break;
+      case "occurrence":
+        if (!rule || !action.due)
+          throw new Error("Recorrência não encontrada. Atualize a tela.");
+        if (text(f, "resolution") === "skip") {
+          await rpc("resolve_recurring", {
+            p_id: id,
+            p_rule: rule.id,
+            p_due: action.due,
+            p_skip: true,
+          });
+        } else {
+          await rpc("record_recurring_payment", {
+            p_id: id,
+            p_rule: rule.id,
+            p_due: action.due,
+            p_amount: amount(),
+            p_date: text(f, "date"),
+          });
+        }
         break;
       case "installment": {
         const monthly = amount(),
@@ -796,17 +829,57 @@ function PlanningEditor({
             </button>
           </p>
         )}
+      {action.kind === "occurrenceAmount" && (
+        <>
+          <p>
+            {rule?.name} · {action.due?.split("-").reverse().join("/")}
+          </p>
+          <Amount hidden={hidden} value={action.amount ?? rule?.amount_cents} />
+          <p className="muted">
+            Altera somente a previsão desta data. Pagamentos e saldo bancário
+            ficam preservados.
+          </p>
+        </>
+      )}
       {action.kind === "occurrence" && (
         <>
           <p>
             {rule?.name} · {action.due?.split("-").reverse().join("/")}
           </p>
           <Field label="Ação">
-            <select name="resolution">
+            <select
+              name="resolution"
+              value={resolution}
+              onChange={(e) => setResolution(e.target.value)}
+            >
               <option value="realize">Marcar como realizado hoje</option>
               <option value="skip">Pular ocorrência</option>
             </select>
           </Field>
+        </>
+      )}
+      {action.kind === "occurrence" && resolution === "realize" && (
+        <>
+          <Amount
+            hidden={hidden}
+            value={
+              action.amount ??
+              (rule && action.due
+                ? occurrenceAmount(
+                    rule,
+                    action.due,
+                    plan.recurring_occurrences,
+                    data.transactions,
+                  )
+                : undefined)
+            }
+            label="Valor pago (R$)"
+          />
+          {date("date", today(), "Data do pagamento", today())}
+          <p className="muted">
+            Um pagamento menor mantém o restante pendente. A data e o valor pago
+            ficam no histórico.
+          </p>
         </>
       )}
       {action.kind === "installment" && (
@@ -1153,7 +1226,9 @@ function PlanningEditor({
           )}
           <p className="muted">
             A regra gera previsões, sem movimentar contas. Ocorrências já
-            realizadas ou puladas ficam preservadas.
+            realizadas ou puladas ficam preservadas. Alterações do valor padrão
+            valem para datas futuras; para variar somente um mês, use Ajustar
+            previsão.
           </p>
         </>
       )}

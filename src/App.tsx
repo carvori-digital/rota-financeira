@@ -225,8 +225,14 @@ export default function App() {
     }
   }
   function resolveCommitment(c: Commitment) {
+    if (c.canResolve === false || ("status" in c && c.status === "completed"))
+      return;
     const transaction = data.transactions.find(
-      (t) => t.id === c.entity && t.status === "pending",
+      (t) =>
+        t.id ===
+          (c.transactionId ??
+            (c.source === "transaction" ? c.entity : undefined)) &&
+        t.status === "pending",
     );
     if (transaction) {
       setFinancialAction({ kind: "resolve", transaction });
@@ -243,17 +249,42 @@ export default function App() {
       ).find((i) => i.card_id === c.entity && i.month === c.due.slice(0, 7));
       if (card && invoice)
         setPlanningAction({ kind: "cardPayment", card, invoice });
-    } else if (c.source === "debt")
-      setPlanningAction({
-        kind: "debtPayment",
-        debt: planning.data.debts.find((d) => d.id === c.entity),
-      });
-    else if (c.source === "recurring")
+    } else if (c.source === "debt") {
+      const debt = planning.data.debts.find((d) => d.id === c.entity);
+      if (!debt) {
+        setNotice("Dívida não encontrada. Atualize a tela.");
+        return;
+      }
+      setPlanningAction({ kind: "debtPayment", debt });
+    } else if (c.source === "recurring") {
+      const rule = planning.data.recurring_items.find((r) => r.id === c.entity);
+      if (!rule) {
+        setNotice("Recorrência não encontrada. Atualize a tela.");
+        return;
+      }
+      const occurrence = planning.data.recurring_occurrences.find(
+        (o) => o.recurring_item_id === rule.id && o.due_date === c.due,
+      );
+      if (
+        (occurrence?.status === "recorded" && c.canResolve !== true) ||
+        occurrence?.status === "skipped"
+      ) {
+        setNotice(
+          "Ocorrência já registrada. Confira o pagamento no histórico.",
+        );
+        return;
+      }
+      if (!rule.active) {
+        setNotice("Recorrência pausada. Atualize a tela.");
+        return;
+      }
       setPlanningAction({
         kind: "occurrence",
-        rule: planning.data.recurring_items.find((r) => r.id === c.entity),
+        rule,
         due: c.due,
+        amount: Math.max(0, c.amount - ("paid" in c ? Number(c.paid) : 0)),
       });
+    }
   }
   function selectQuickAction(kind: string) {
     setQuick(false);

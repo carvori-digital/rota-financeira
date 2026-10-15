@@ -14,6 +14,12 @@ export interface RecurringItem extends Base {
 export interface RecurringOccurrence extends Base {
   recurring_item_id: string;
   due_date: string;
-  status: "recorded" | "skipped";
+  status: "planned" | "recorded" | "skipped";
+  amount_cents?: number | null;
   transaction_id: string | null;
+}
+
+export interface RecurringPayment extends Base {
+  occurrence_id: string;
+  transaction_id: string;
 }

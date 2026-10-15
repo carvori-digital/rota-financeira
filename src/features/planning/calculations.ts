@@ -6,7 +6,11 @@ import {
   isRealized,
 } from "../../utils/finance.ts";
 import { addMonths } from "./dates.ts";
-import { recurringDates } from "../recurring/calculations.ts";
+import {
+  recurringDates,
+  occurrenceAmount,
+  occurrencePayments,
+} from "../recurring/calculations.ts";
 import { invoices } from "../cards/calculations.ts";
 import { debtInstallments } from "../debts/calculations.ts";
 export function projection(
@@ -27,12 +31,68 @@ export function projection(
         entity: r.id,
         name: r.name,
         due,
-        amount: r.amount_cents,
+        amount: occurrenceAmount(
+          r,
+          due,
+          plan.recurring_occurrences,
+          data.transactions,
+        ),
+        reserveAccount: data.accounts.some(
+          (a) => a.id === r.account_id && isReserveAccount(a),
+        ),
         impact: cash(r.account_id)
-          ? r.amount_cents * (r.type === "income" ? 1 : -1)
+          ? occurrenceAmount(
+              r,
+              due,
+              plan.recurring_occurrences,
+              data.transactions,
+            ) * (r.type === "income" ? 1 : -1)
           : 0,
         direction: r.type,
       });
+  for (const o of plan.recurring_occurrences.filter(
+    (o) => o.status === "recorded",
+  )) {
+    const r = plan.recurring_items.find((r) => r.id === o.recurring_item_id);
+    const linked = data.transactions.find((t) => t.id === o.transaction_id);
+    if (
+      !r ||
+      !linked ||
+      linked.status === "pending" ||
+      linked.status === "cancelled" ||
+      !isRealized(linked, asOf)
+    )
+      continue;
+    const paid = occurrencePayments(
+      o,
+      r.type,
+      data.transactions,
+      plan.recurring_payments ?? [],
+      asOf,
+    ).reduce((s, t) => s + t.amount_cents, 0);
+    const remaining =
+      occurrenceAmount(
+        r,
+        o.due_date,
+        plan.recurring_occurrences,
+        data.transactions,
+      ) - paid;
+    if (remaining <= 0) continue;
+    all.push({
+      id: `${r.id}:${o.due_date}`,
+      source: "recurring",
+      entity: r.id,
+      occurrenceId: o.id,
+      name: r.name,
+      due: o.due_date,
+      amount: remaining,
+      impact: cash(r.account_id)
+        ? remaining * (r.type === "income" ? 1 : -1)
+        : 0,
+      direction: r.type,
+      canResolve: r.active && o.due_date <= asOf,
+    });
+  }
   for (const i of invoices(
     plan.credit_cards,
     plan.card_purchases,
@@ -105,9 +165,15 @@ export function projection(
         : t.planning_group === "other"
           ? "other"
           : "scheduled",
-      entity: t.id,
+      entity: occurrence?.recurring_item_id ?? t.id,
+      transactionId: t.id,
+      occurrenceId: occurrence?.id,
+      canResolve: true,
+      reserveAccount: data.accounts.some(
+        (a) => a.id === t.account_id && isReserveAccount(a),
+      ),
       name: t.description || "Lançamento previsto",
-      due: t.transaction_date,
+      due: occurrence?.due_date ?? t.transaction_date,
       amount: t.amount_cents,
       impact,
       direction:

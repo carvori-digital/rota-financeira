@@ -26,6 +26,7 @@ const financeTables = [
 const planTables = [
   "recurring_items",
   "recurring_occurrences",
+  "recurring_payments",
   "credit_cards",
   "card_purchases",
   "card_invoices",

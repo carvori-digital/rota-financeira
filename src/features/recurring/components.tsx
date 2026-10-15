@@ -4,7 +4,11 @@ import type { PlanningData } from "../planning/types";
 import type { Money } from "../planning/ui";
 import { Status } from "../planning/ui";
 import type { RecurringItem } from "./types";
-import { recurringDates } from "./calculations";
+import {
+  recurringDates,
+  occurrenceAmount,
+  occurrencePayments,
+} from "./calculations";
 import { addMonths } from "../planning/dates";
 import { displayDate, today } from "../../utils/finance";
 export function RecurringPanel({
@@ -14,12 +18,14 @@ export function RecurringPanel({
   onEdit,
   onResolve,
   onToggle,
+  onAmount,
   onSaved,
 }: {
   plan: PlanningData;
   transactions: Transaction[];
   money: Money;
   onEdit: (r?: RecurringItem) => void;
+  onAmount?: (r: RecurringItem, due: string, amount: number) => void;
   onResolve: (r: RecurringItem, date: string, skip: boolean) => void;
   onToggle: (r: RecurringItem) => void;
   onSaved: () => Promise<void>;
@@ -70,9 +76,35 @@ export function RecurringPanel({
               <div className="account-line" key={date}>
                 <small>
                   {displayDate(date)} ·{" "}
-                  <Status state={date <= now ? "pending" : "forecast"} />
+                  {money(
+                    occurrenceAmount(
+                      r,
+                      date,
+                      plan.recurring_occurrences,
+                      transactions,
+                    ),
+                  )}{" "}
+                  · <Status state={date <= now ? "pending" : "forecast"} />
                 </small>
                 <div className="actions">
+                  {onAmount && (
+                    <button
+                      onClick={() =>
+                        onAmount(
+                          r,
+                          date,
+                          occurrenceAmount(
+                            r,
+                            date,
+                            plan.recurring_occurrences,
+                            transactions,
+                          ),
+                        )
+                      }
+                    >
+                      Ajustar previsão
+                    </button>
+                  )}
                   <button
                     disabled={date > now}
                     onClick={() => onResolve(r, date, false)}
@@ -88,25 +120,49 @@ export function RecurringPanel({
           <details>
             <summary>Ocorrências realizadas e puladas</summary>
             {plan.recurring_occurrences
-              .filter((o) => o.recurring_item_id === r.id)
+              .filter(
+                (o) => o.recurring_item_id === r.id && o.status !== "planned",
+              )
               .sort((a, b) => b.due_date.localeCompare(a.due_date))
-              .map((o) => (
-                <div className="account-line" key={o.id}>
-                  <small>{displayDate(o.due_date)}</small>
-                  <Status
-                    state={
-                      o.status === "recorded"
-                        ? transactions.find((t) => t.id === o.transaction_id)
-                            ?.status === "pending"
-                          ? o.due_date <= now
-                            ? "pending"
-                            : "forecast"
-                          : "realized"
-                        : "skipped"
-                    }
-                  />
-                </div>
-              ))}
+              .map((o) => {
+                const paid = occurrencePayments(
+                  o,
+                  r.type,
+                  transactions,
+                  plan.recurring_payments ?? [],
+                  now,
+                ).reduce((sum, t) => sum + t.amount_cents, 0);
+                const expected = occurrenceAmount(
+                  r,
+                  o.due_date,
+                  plan.recurring_occurrences,
+                  transactions,
+                );
+                return (
+                  <div className="account-line" key={o.id}>
+                    <small>
+                      {displayDate(o.due_date)}
+                      {o.status === "recorded" ? (
+                        <>
+                          {" "}
+                          · Pago {money(paid)} de {money(expected)}
+                        </>
+                      ) : null}
+                    </small>
+                    <Status
+                      state={
+                        o.status === "skipped"
+                          ? "skipped"
+                          : expected > 0 && paid >= expected
+                            ? "realized"
+                            : o.due_date > now
+                              ? "forecast"
+                              : "pending"
+                      }
+                    />
+                  </div>
+                );
+              })}
           </details>
           <DeleteRecord
             kind="recurring"

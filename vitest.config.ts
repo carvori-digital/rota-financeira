@@ -8,6 +8,7 @@ export default defineConfig({
       "tests/ui.test.tsx",
       "tests/sprint03-ui.test.tsx",
       "tests/adjust04-ui.test.tsx",
+      "tests/hotfix-ui.test.tsx",
     ],
     clearMocks: true,
   },

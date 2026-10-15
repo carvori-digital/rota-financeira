@@ -28,6 +28,7 @@ const names = new Set([
   "goal_contributions",
   "recurring_items",
   "recurring_occurrences",
+  "recurring_payments",
   "credit_cards",
   "card_purchases",
   "card_invoices",
@@ -182,6 +183,8 @@ try {
             "pay_card_invoice",
             "pay_debt",
             "resolve_recurring",
+            "record_recurring_payment",
+            "set_recurring_occurrence_amount",
             "repeat_transaction",
             "save_emergency_reserve",
             "create_card_purchase",
@@ -696,6 +699,173 @@ try {
     await fit(`${width}px pagamento dívida modal`);
     await button("Fechar").click();
   }
+  // Hotfix regression fixtures and real RPCs: disposable PostgreSQL only.
+  const hotfixRule = randomUUID(),
+    paidId = randomUUID();
+  await query(
+    "insert into recurring_items(id,name,type,amount_cents,account_id,category_id,frequency,start_date) values($1,'Cemig hotfix quitada','expense',36337,$2,$3,'monthly',$4)",
+    [hotfixRule, cash, expense, today],
+  );
+  await query("select resolve_recurring($1,$2,$3,false)", [
+    paidId,
+    hotfixRule,
+    today,
+  ]);
+  await query("update recurring_items set amount_cents=39678 where id=$1", [
+    hotfixRule,
+  ]);
+  const nextDue = (
+    await query(
+      "select public.month_day(($1::date+interval '1 month')::date,extract(day from $1::date)::integer)::text d",
+      [today],
+    )
+  )[0].d;
+  await query("select set_recurring_occurrence_amount($1,$2,39678)", [
+    hotfixRule,
+    nextDue,
+  ]);
+  // A retired origin is created only by privileged migration/deletion code.
+  // Seed that post-deletion state as the owner of the disposable database.
+  await db.exec("reset role");
+  await query(
+    "insert into accounts(user_id,name,type,initial_balance_cents,is_active,investment_retired) values($1,'Reserva hotfix excluída','investment',48866,false,true)",
+    [user],
+  );
+  await db.exec("set role authenticated");
+  await query("select create_simple_investment($1,$2::jsonb)", [
+    randomUUID(),
+    JSON.stringify({
+      name: "Caixinha Turbo hotfix",
+      institution: "Nubank",
+      type: "RDB",
+      initial_date: today,
+      initial_cents: 59069,
+      yield_type: "manual",
+      yield_rate: 0,
+      reserve: true,
+      acknowledged: true,
+    }),
+  ]);
+  for (const width of [375, 390, 430]) {
+    const partialRule = randomUUID(),
+      partialId = randomUUID(),
+      skipRule = randomUUID();
+    await query(
+      "insert into recurring_items(id,name,type,amount_cents,account_id,category_id,frequency,start_date) values($1,$2,'expense',10000,$3,$4,'monthly',$5)",
+      [partialRule, `Cemig parcial ${width}`, cash, expense, today],
+    );
+    await query("select record_recurring_payment($1,$2,$3,5000,$3)", [
+      partialId,
+      partialRule,
+      today,
+    ]);
+    await query(
+      "insert into recurring_items(id,name,type,amount_cents,account_id,category_id,frequency,start_date) values($1,$2,'expense',10000,$3,$4,'monthly',$5)",
+      [skipRule, `Cemig pular ${width}`, cash, expense, today],
+    );
+    await page.setViewportSize({ width, height: 844 });
+    await page.reload();
+    await page.getByText("Saldo agora", { exact: true }).waitFor();
+    await nav("Planejar").click();
+    await tab("Visão do mês").click();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Fixas/ })
+      .click();
+    const paidRow = page
+      .locator(".commitment-row")
+      .filter({ hasText: "Cemig hotfix quitada" });
+    await paidRow.getByText("Realizado", { exact: true }).waitFor();
+    assert.equal(await paidRow.getByRole("button").count(), 0);
+    assert.equal(
+      (await paidRow.innerText()).includes("conta de reserva"),
+      false,
+    );
+    assert.equal(
+      (await paidRow.innerText()).includes("transferência interna"),
+      false,
+    );
+    assert.ok((await paidRow.innerText()).includes("363,37"));
+    await fit(`${width}px Cemig quitada sem residual nem rótulo interno`);
+    const partialRow = page
+      .locator(".commitment-row")
+      .filter({ hasText: `Cemig parcial ${width}` });
+    await partialRow
+      .getByRole("button", { name: "Marcar pago", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Realizar ou pular ocorrência" })
+      .waitFor();
+    assert.equal(await field("Valor pago (R$)").inputValue(), "50,00");
+    await fit(`${width}px pagamento parcial por regra canônica`);
+    await save();
+    await partialRow.getByText("Realizado", { exact: true }).waitFor();
+    assert.equal(await partialRow.getByRole("button").count(), 0);
+    const beforeSkip = await query(
+      "select id,amount_cents,status,transaction_date from transactions order by id",
+    );
+    const skipRow = page
+      .locator(".commitment-row")
+      .filter({ hasText: `Cemig pular ${width}` });
+    await skipRow
+      .getByRole("button", { name: "Marcar pago", exact: true })
+      .click();
+    await field("Ação").selectOption("skip");
+    await fit(`${width}px pular ocorrência sem pagamento`);
+    await save();
+    assert.deepEqual(
+      await query(
+        "select id,amount_cents,status,transaction_date from transactions order by id",
+      ),
+      beforeSkip,
+    );
+    assert.equal(
+      (
+        await query(
+          "select status from recurring_occurrences where recurring_item_id=$1",
+          [skipRule],
+        )
+      )[0].status,
+      "skipped",
+    );
+    await tab("Recorrentes").click();
+    const ruleCard = page.locator("article").filter({
+      has: page.getByRole("heading", {
+        name: "Cemig hotfix quitada",
+        exact: true,
+      }),
+    });
+    await ruleCard
+      .getByRole("button", { name: "Ajustar previsão", exact: true })
+      .first()
+      .click();
+    await field("Valor (R$)").fill("396,78");
+    await fit(`${width}px previsão variável do próximo mês`);
+    await save();
+    assert.deepEqual(
+      await query(
+        "select id,amount_cents,status,transaction_date from transactions order by id",
+      ),
+      beforeSkip,
+    );
+    await tab("Reserva e investimentos").click();
+    assert.equal(
+      await page.getByText("Reserva hotfix excluída", { exact: true }).count(),
+      0,
+    );
+    await page.getByText("Caixinha Turbo hotfix", { exact: true }).waitFor();
+    await button("Ajustar reserva").click();
+    assert.equal(
+      await page.getByLabel("Reserva hotfix excluída", { exact: true }).count(),
+      0,
+    );
+    await fit(
+      `${width}px reserva aposentada ausente e nova Caixinha preservada`,
+    );
+    await button("Fechar").click();
+    await capture(`${width}-hotfix-reserva-cemig`);
+  }
+
   await nav("Início").click();
   await button("Ocultar valores").click();
   assert.equal(
@@ -724,7 +894,7 @@ try {
         errors,
         outbound,
         backend:
-          "PGlite com RLS authenticated e migrations 001–012; Auth e HTTP simulados; nenhum acesso remoto",
+          "PGlite com RLS authenticated e migrations 001–013; Auth e HTTP simulados; nenhum acesso remoto",
       },
       null,
       2,

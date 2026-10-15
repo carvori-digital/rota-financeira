@@ -93,6 +93,7 @@ test("recurrence appears once and only verified integral payment completes", () 
     {
       ...base,
       id: "occ",
+      amount_cents: 1000,
       recurring_item_id: "rule",
       due_date: "2026-10-02",
       status: "recorded",

@@ -60,6 +60,13 @@ export function balance(
 export function isReserveAccount(account: Account) {
   return account.type === "savings" || account.type === "investment";
 }
+export function isLegacyReserveAccount(account: Account) {
+  return (
+    !account.investment_id &&
+    !account.investment_retired &&
+    isReserveAccount(account)
+  );
+}
 export function balanceSummary(
   accounts: Account[],
   transactions: Transaction[],

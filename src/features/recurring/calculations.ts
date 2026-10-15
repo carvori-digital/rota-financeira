@@ -1,3 +1,6 @@
+import { isRealized } from "../../utils/finance.ts";
+import type { RecurringPayment } from "./types.ts";
+import type { Transaction } from "../../types/index.ts";
 import type { RecurringItem, RecurringOccurrence } from "./types.ts";
 import { addMonths, addDays } from "../planning/dates.ts";
 export function recurringDates(
@@ -7,7 +10,7 @@ export function recurringDates(
 ) {
   const resolved = new Set(
     completed
-      .filter((o) => o.recurring_item_id === rule.id)
+      .filter((o) => o.recurring_item_id === rule.id && o.status !== "planned")
       .map((o) => o.due_date),
   );
   const dates: string[] = [];
@@ -46,5 +49,43 @@ export function essentialMonthly(rules: RecurringItem[], asOf: string) {
                 : 1),
         0,
       ),
+  );
+}
+
+// Legacy recorded occurrences use only their linked transaction as evidence.
+// The current rule is never evidence of what was owed in a previous month.
+export function occurrenceAmount(
+  rule: RecurringItem,
+  due: string,
+  occurrences: RecurringOccurrence[],
+  transactions: Transaction[] = [],
+) {
+  const occurrence = occurrences.find(
+    (o) => o.recurring_item_id === rule.id && o.due_date === due,
+  );
+  if (occurrence?.amount_cents != null) return occurrence.amount_cents;
+  if (occurrence?.status === "recorded")
+    return (
+      transactions.find((t) => t.id === occurrence.transaction_id)
+        ?.amount_cents ?? 0
+    );
+  return rule.amount_cents;
+}
+
+export function occurrencePayments(
+  occurrence: RecurringOccurrence,
+  type: RecurringItem["type"],
+  transactions: Transaction[],
+  payments: RecurringPayment[],
+  asOf: string,
+) {
+  const ids = new Set([
+    occurrence.transaction_id,
+    ...payments
+      .filter((p) => p.occurrence_id === occurrence.id)
+      .map((p) => p.transaction_id),
+  ]);
+  return transactions.filter(
+    (t) => ids.has(t.id) && t.type === type && isRealized(t, asOf),
   );
 }
