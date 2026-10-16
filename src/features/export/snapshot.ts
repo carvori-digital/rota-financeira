@@ -65,7 +65,21 @@ export function validateSnapshot(
     !r.data
   )
     throw new Error("Origem do relatório inválida");
+  const subscriptionTables = [
+    "card_subscriptions",
+    "card_subscription_versions",
+    "card_subscription_occurrences",
+  ] as const;
+  const presentSubscriptions = subscriptionTables.filter(
+    (t) => r.data![t] !== undefined,
+  );
+  if (
+    presentSubscriptions.length > 0 &&
+    presentSubscriptions.length !== subscriptionTables.length
+  )
+    throw new Error("Histórico de assinaturas incompleto");
   for (const table of [
+    ...presentSubscriptions,
     ...financeTables,
     ...planTables,
     "report_month_confirmations",
@@ -92,6 +106,9 @@ export function validateSnapshot(
     ) as unknown as FinanceData,
     plan: {
       ...Object.fromEntries(planTables.map((t) => [t, r.data![t]])),
+      ...Object.fromEntries(
+        subscriptionTables.map((t) => [t, r.data![t] ?? []]),
+      ),
       cdi_history: cdi,
     } as unknown as PlanningData,
     confirmations: r.data.report_month_confirmations as MonthConfirmation[],

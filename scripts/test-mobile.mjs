@@ -31,6 +31,9 @@ const names = new Set([
   "recurring_payments",
   "credit_cards",
   "card_purchases",
+  "card_subscriptions",
+  "card_subscription_versions",
+  "card_subscription_occurrences",
   "card_invoices",
   "card_payments",
   "debts",
@@ -56,7 +59,15 @@ const normalize = (rows) =>
         value instanceof Date
           ? value
               .toISOString()
-              .slice(0, key === "date" || key.endsWith("_date") ? 10 : 24)
+              .slice(
+                0,
+                key === "date" ||
+                  key.endsWith("_date") ||
+                  key === "charge_month" ||
+                  key === "effective_month"
+                  ? 10
+                  : 24,
+              )
           : key.endsWith("_cents") && value !== null
             ? Number(value)
             : value,
@@ -180,6 +191,8 @@ try {
       if (parts.includes("rpc")) {
         assert.ok(
           [
+            "save_card_subscription",
+            "resolve_card_subscription",
             "set_card_invoice",
             "pay_card_invoice",
             "pay_debt",
@@ -272,8 +285,37 @@ try {
   page.setDefaultTimeout(10000);
   page.on("pageerror", (error) => errors.push(error.message));
   const nav = (name) =>
-    page.getByRole("navigation").getByRole("button", { name, exact: true });
-  const tab = (name) => page.getByRole("tab", { name, exact: true });
+    name === "Planejar"
+      ? {
+          click: async () => {
+            await page
+              .getByRole("navigation")
+              .getByRole("button", { name: "Início", exact: true })
+              .click();
+            await page
+              .getByRole("button", { name: "Planejar", exact: true })
+              .click();
+          },
+        }
+      : page.getByRole("navigation").getByRole("button", { name, exact: true });
+  const tab = (name) => ({
+    click: async () => {
+      if ((await page.getByRole("tab", { name, exact: true }).count()) === 0) {
+        await nav(
+          [
+            "Contas",
+            "Cartões",
+            "Assinaturas",
+            "Investimentos e reserva",
+            "Dívidas e parcelas",
+          ].includes(name)
+            ? "Carteira"
+            : "Planejar",
+        ).click();
+      }
+      await page.getByRole("tab", { name, exact: true }).click();
+    },
+  });
   const button = (name) => page.getByRole("button", { name, exact: true });
   const field = (label) => page.getByLabel(label, { exact: true });
   const save = async () => {
@@ -350,7 +392,7 @@ try {
   await fit("375px criar cartão");
   await capture("375-card-form");
   await save();
-  await button("Editar cartão").click();
+  await button("Editar cartão").first().click();
   await field("Nome").fill("Cartão editado");
   await save();
   assert.equal(
@@ -434,7 +476,7 @@ try {
       .length,
     1,
   );
-  await tab("Reserva e investimentos").click();
+  await tab("Investimentos e reserva").click();
   await button("Ajustar reserva").click();
   await field(
     "Custo essencial mensal (R$) · deixe vazio para usar sugestão",
@@ -586,6 +628,7 @@ try {
   await tab("Dívidas e parcelas").click();
   await page.getByText(/Parcela 8\/14/).waitFor();
   await nav("Ajustes").click();
+  await button("Gerenciar contas na Carteira").click();
   await page
     .locator(".settings-account")
     .filter({ hasText: "Conta local" })
@@ -637,19 +680,19 @@ try {
       "Cartões",
       "Dívidas e parcelas",
       "Recorrentes",
-      "Reserva e investimentos",
+      "Investimentos e reserva",
     ]) {
       await tab(name).click();
       await fit(`${width}px ${name}`);
       await capture(
-        `${width}-${["Programadas", "Cartões", "Dívidas e parcelas", "Recorrentes", "Reserva e investimentos"].indexOf(name)}`,
+        `${width}-${["Programadas", "Cartões", "Dívidas e parcelas", "Recorrentes", "Investimentos e reserva"].indexOf(name)}`,
       );
     }
     await tab("Cartões").click();
     await button("Compra no cartão").click();
     await fit(`${width}px compra parcelada modal`);
     await button("Fechar").click();
-    await tab("Reserva e investimentos").click();
+    await tab("Investimentos e reserva").click();
     await button("Adicionar investimento").click();
     await fit(`${width}px investimento modal`);
     await capture(`${width}-investment-form`);
@@ -680,6 +723,7 @@ try {
     await capture(`${width}-delete-investment`);
     await button("Fechar").click();
     await nav("Ajustes").click();
+    await button("Gerenciar contas na Carteira").click();
     const accountSettings = page
       .locator(".settings-account")
       .filter({ hasText: "Conta local" });
@@ -850,7 +894,7 @@ try {
       ),
       beforeSkip,
     );
-    await tab("Reserva e investimentos").click();
+    await tab("Investimentos e reserva").click();
     assert.equal(
       await page.getByText("Reserva hotfix excluída", { exact: true }).count(),
       0,
@@ -868,6 +912,93 @@ try {
     await capture(`${width}-hotfix-reserva-cemig`);
   }
 
+  // Subscription flow uses actual RPCs against this disposable PostgreSQL.
+  const subscriptionBankBefore = await actualCash();
+  await nav("Carteira").click();
+  await tab("Cartões").click();
+  await button("Adicionar cartão").click();
+  await field("Nome").fill("Cartão de assinaturas local");
+  await field("Dia do fechamento").fill("20");
+  await field("Dia do vencimento").fill("28");
+  await save();
+  const subscriptionCard = (
+    await query(
+      "select id from credit_cards where name='Cartão de assinaturas local'",
+    )
+  )[0].id;
+  await tab("Assinaturas").click();
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Cartão").inputValue(), "");
+  await field("Nome").fill("Assinatura local");
+  await field("Cartão").selectOption(subscriptionCard);
+  await field("Categoria").selectOption(expense);
+  await field("Valor previsto (R$)").fill("20,00");
+  await field("Dia habitual da cobrança").fill(
+    String(Number(today.slice(8, 10))),
+  );
+  await field("Data inicial").fill(today);
+  await save();
+  assert.equal(await actualCash(), subscriptionBankBefore);
+  const subscription = (await query("select id from card_subscriptions"))[0].id;
+  await button("Alterar próximas cobranças").click();
+  const nextMonth = new Date(today + "T12:00:00Z");
+  nextMonth.setUTCDate(1);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  await field("Aplicar a partir do mês de cobrança").fill(
+    nextMonth.toISOString().slice(0, 7),
+  );
+  await field("Valor previsto (R$)").fill("25,00");
+  await save();
+  await button("Conferir cobrança").click();
+  await field("Valor previsto (R$)").fill("21,00");
+  await save();
+  await button("Conferir cobrança").click();
+  await field("Ação").selectOption("confirm");
+  await save();
+  assert.equal(
+    (
+      await query(
+        "select * from card_subscription_occurrences where subscription_id=$1",
+        [subscription],
+      )
+    )[0].status,
+    "confirmed",
+  );
+  assert.equal(
+    (
+      await query("select * from card_purchases where card_id=$1", [
+        subscriptionCard,
+      ])
+    ).length,
+    1,
+  );
+  assert.equal(await actualCash(), subscriptionBankBefore);
+  await tab("Cartões").click();
+  const subscriptionCardPanel = page
+    .locator("article")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Cartão de assinaturas local",
+        exact: true,
+      }),
+    });
+  await subscriptionCardPanel
+    .getByRole("button", { name: "Pagar fatura", exact: true })
+    .click();
+  assert.equal(await field("Valor (R$)").inputValue(), "21,00");
+  await save();
+  assert.equal(await actualCash(), subscriptionBankBefore - 2100);
+  const confirmedLedger = await query("select * from transactions order by id");
+  await tab("Assinaturas").click();
+  await button("Conferir cobrança").waitFor({ state: "hidden" });
+  assert.deepEqual(
+    await query("select * from transactions order by id"),
+    confirmedLedger,
+  );
+  results.push(
+    "subscription registration, future price, one-occurrence override, confirmed purchase and invoice payment use real isolated RPCs; forecasts never debit cash",
+  );
+
   await nav("Início").click();
   await button("Ocultar valores").click();
   assert.equal(
@@ -879,7 +1010,7 @@ try {
   );
   await nav("Planejar").click();
   await tab("Cartões").click();
-  await button("Editar cartão").click();
+  await button("Editar cartão").first().click();
   assert.equal(
     await field("Limite (R$) · opcional").getAttribute("type"),
     "password",

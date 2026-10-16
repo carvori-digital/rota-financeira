@@ -7,7 +7,7 @@ import {
 } from "../recurring/calculations.ts";
 import { projection } from "./calculations.ts";
 import { isRealized, isReserveAccount } from "../../utils/finance.ts";
-import { invoices } from "../cards/calculations.ts";
+import { planningInvoices } from "../subscriptions/calculations.ts";
 
 export interface MonthlyCommitment extends Commitment {
   status: "pending" | "completed";
@@ -181,13 +181,7 @@ export function monthlyCommitments(
       p.payment_date <= asOf
     );
   });
-  for (const i of invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
-    payments,
-    plan.card_adjustments,
-  )) {
+  for (const i of planningInvoices(plan, payments, asOf)) {
     if (i.total <= 0) continue;
     const card = plan.credit_cards.find((c) => c.id === i.card_id)!;
     put(
@@ -207,6 +201,7 @@ export function monthlyCommitments(
             : 0,
         direction: "expense",
         group: "cards",
+        canResolve: (i.payable ?? i.pending) > 0,
       },
       i.paid,
       payments

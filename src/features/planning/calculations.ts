@@ -13,7 +13,7 @@ import {
   occurrencePayments,
 } from "../recurring/calculations.ts";
 import { verifiedCardPayments } from "../cards/verifiedPayments.ts";
-import { invoices } from "../cards/calculations.ts";
+import { planningInvoices } from "../subscriptions/calculations.ts";
 import { debtInstallments } from "../debts/calculations.ts";
 export function projection(
   data: FinanceData,
@@ -114,12 +114,10 @@ export function projection(
       canResolve: true,
     });
   }
-  for (const i of invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
+  for (const i of planningInvoices(
+    plan,
     verifiedCardPayments(data.transactions, plan.card_payments, asOf),
-    plan.card_adjustments,
+    asOf,
   )) {
     if (i.pending === 0 || i.due_date > through) continue;
     const card = plan.credit_cards.find((c) => c.id === i.card_id)!;
@@ -128,6 +126,7 @@ export function projection(
       source: "card",
       entity: card.id,
       name: `Fatura · ${card.name}`,
+      canResolve: (i.payable ?? i.pending) > 0,
       due: i.due_date,
       amount: i.pending,
       impact:

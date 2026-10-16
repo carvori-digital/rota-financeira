@@ -111,6 +111,33 @@ const rows = {
       active: true,
     },
   ],
+  card_subscriptions: [
+    {
+      ...base,
+      id: "subscription-preview",
+      start_date: `${month}-01`,
+      billing_day: 1,
+      frequency: "monthly",
+    },
+  ],
+  card_subscription_versions: [
+    {
+      ...base,
+      id: "subscription-version",
+      subscription_id: "subscription-preview",
+      revision: 1,
+      effective_month: `${month}-01`,
+      name: "Serviço mensal de demonstração",
+      card_id: "card",
+      category_id: "leisure",
+      amount_cents: 2500,
+      closing_day: 20,
+      due_day: 28,
+      status: "active",
+      end_date: null,
+    },
+  ],
+  card_subscription_occurrences: [],
   card_purchases: [
     {
       ...base,

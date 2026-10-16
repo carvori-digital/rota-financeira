@@ -483,6 +483,44 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
         "active",
       ]),
     ),
+    card_subscriptions: (s.plan.card_subscriptions ?? []).map((r) =>
+      pick(r, [...base, "start_date", "billing_day", "frequency"]),
+    ),
+    card_subscription_versions: (s.plan.card_subscription_versions ?? []).map(
+      (r) =>
+        pick(r, [
+          ...base,
+          "subscription_id",
+          "revision",
+          "effective_month",
+          "name",
+          "card_id",
+          "category_id",
+          "amount_cents",
+          "closing_day",
+          "due_day",
+          "status",
+          "end_date",
+        ]),
+    ),
+    card_subscription_occurrences: (
+      s.plan.card_subscription_occurrences ?? []
+    ).map((r) =>
+      pick(r, [
+        ...base,
+        "subscription_id",
+        "charge_month",
+        "charge_date",
+        "due_date",
+        "name",
+        "card_id",
+        "category_id",
+        "amount_cents",
+        "status",
+        "purchase_id",
+        "covered_invoice_id",
+      ]),
+    ),
     recurrences: s.plan.recurring_items.map((r) =>
       pick(r, [
         ...base,

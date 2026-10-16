@@ -2,7 +2,7 @@ import {
   House,
   ArrowLeftRight,
   CirclePlus,
-  CalendarRange,
+  Wallet,
   ChartNoAxesCombined,
   Settings,
 } from "lucide-react";
@@ -23,7 +23,7 @@ export function BottomNavigation({
         { id: "home", label: "Início", Icon: House },
         { id: "history", label: "Movimentos", Icon: ArrowLeftRight },
         { id: "add", label: "Novo", Icon: CirclePlus },
-        { id: "planning", label: "Planejar", Icon: CalendarRange },
+        { id: "wallet", label: "Carteira", Icon: Wallet },
         { id: "reports", label: "Relatórios", Icon: ChartNoAxesCombined },
         { id: "settings", label: "Ajustes", Icon: Settings },
       ].map(({ id, label, Icon }) => (

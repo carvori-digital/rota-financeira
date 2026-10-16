@@ -18,7 +18,7 @@ import { FinancialActions } from "./features/planning/FinancialActions";
 import type { FinancialAction } from "./features/planning/FinancialActions";
 import type { Commitment } from "./features/planning/types";
 import { QuickSetup } from "./features/planning/QuickSetup";
-import { invoices } from "./features/cards/calculations";
+import { planningInvoices } from "./features/subscriptions/calculations";
 import { rpc } from "./features/planning/queries";
 import type { Account, Category, Goal, Transaction, Table } from "./types";
 import {
@@ -120,6 +120,7 @@ export default function App() {
     await Promise.all([finance.refresh(), planning.refresh()]);
   }
   const [planningSection, setPlanningSection] = useState("month");
+  const [walletSection, setWalletSection] = useState("accounts");
   useEffect(() => {
     if (!supabase) {
       setAuthLoading(false);
@@ -240,12 +241,10 @@ export default function App() {
     }
     if (c.source === "card") {
       const card = planning.data.credit_cards.find((x) => x.id === c.entity);
-      const invoice = invoices(
-        planning.data.credit_cards,
-        planning.data.card_purchases,
-        planning.data.card_invoices,
+      const invoice = planningInvoices(
+        planning.data,
         planning.data.card_payments,
-        planning.data.card_adjustments,
+        today(),
       ).find((i) => i.card_id === c.entity && i.month === c.due.slice(0, 7));
       if (card && invoice)
         setPlanningAction({ kind: "cardPayment", card, invoice });
@@ -308,12 +307,10 @@ export default function App() {
     } else if (kind.startsWith("cardPayment:")) {
       const [cardId, invoiceMonth] = kind.slice(12).split(":");
       const card = planning.data.credit_cards.find((c) => c.id === cardId);
-      const invoice = invoices(
-        planning.data.credit_cards,
-        planning.data.card_purchases,
-        planning.data.card_invoices,
+      const invoice = planningInvoices(
+        planning.data,
         planning.data.card_payments,
-        planning.data.card_adjustments,
+        today(),
       ).find((i) => i.card_id === cardId && i.month === invoiceMonth);
       if (card && invoice)
         setPlanningAction({ kind: "cardPayment", card, invoice });
@@ -404,8 +401,17 @@ export default function App() {
                 money={money}
                 hidden={valuesHidden}
                 onPlan={(section) => {
-                  setPlanningSection(section ?? "month");
-                  setPage("planning");
+                  if (
+                    ["cards", "debts", "reserve", "subscriptions"].includes(
+                      section ?? "",
+                    )
+                  ) {
+                    setWalletSection(section!);
+                    setPage("wallet");
+                  } else {
+                    setPlanningSection(section ?? "month");
+                    setPage("planning");
+                  }
                 }}
                 onAction={selectQuickAction}
                 onResolve={resolveCommitment}
@@ -452,52 +458,14 @@ export default function App() {
                   Configuração rápida
                 </button>
                 <p className="muted">{session.user.email}</p>
-                <div className="section-heading">
-                  <h2>Contas</h2>
-                  <button onClick={() => setEditor({ kind: "account" })}>
-                    + Criar
-                  </button>
-                </div>
-                {data.accounts
-                  .filter((a) => !a.investment_id && !a.investment_retired)
-                  .map((a) => (
-                    <details className="settings-account" key={a.id}>
-                      <summary>
-                        <span className="settings-account-name">
-                          <strong>{a.name}</strong>
-                          <small>
-                            {accountTypes[a.type]} ·{" "}
-                            {a.is_active ? "Ativa" : "Arquivada"}
-                          </small>
-                        </span>
-                        <strong className="settings-account-balance">
-                          {money(balance(a, data.transactions))}
-                        </strong>
-                      </summary>
-                      <div className="actions">
-                        <button
-                          onClick={() => setEditor({ kind: "account", row: a })}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() =>
-                            setFinancialAction({ kind: "adjust", account: a })
-                          }
-                        >
-                          Ajustar saldo atual
-                        </button>
-                        <button
-                          disabled={operation}
-                          onClick={() =>
-                            void archive("accounts", a.id, a.is_active)
-                          }
-                        >
-                          {a.is_active ? "Arquivar" : "Reativar"}
-                        </button>
-                      </div>
-                    </details>
-                  ))}
+                <button
+                  onClick={() => {
+                    setWalletSection("accounts");
+                    setPage("wallet");
+                  }}
+                >
+                  Gerenciar contas na Carteira
+                </button>
                 <details className="settings-section">
                   <summary>Categorias · {data.categories.length}</summary>
                   <div className="section-heading">
@@ -561,9 +529,63 @@ export default function App() {
             plan={planning.data}
             money={money}
             hidden={valuesHidden}
-            visible={page === "planning"}
-            section={planningSection}
-            onSection={setPlanningSection}
+            visible={page === "planning" || page === "wallet"}
+            area={page === "wallet" ? "wallet" : "planning"}
+            accountsContent={
+              <>
+                <div className="section-heading">
+                  <h2>Contas</h2>
+                  <button onClick={() => setEditor({ kind: "account" })}>
+                    + Criar
+                  </button>
+                </div>
+                {data.accounts
+                  .filter((a) => !a.investment_id && !a.investment_retired)
+                  .map((a) => (
+                    <details className="settings-account" key={a.id}>
+                      <summary>
+                        <span className="settings-account-name">
+                          <strong>{a.name}</strong>
+                          <small>
+                            {accountTypes[a.type]} ·{" "}
+                            {a.is_active ? "Ativa" : "Arquivada"}
+                          </small>
+                        </span>
+                        <strong className="settings-account-balance">
+                          {money(balance(a, data.transactions))}
+                        </strong>
+                      </summary>
+                      <div className="actions">
+                        <button
+                          onClick={() => setEditor({ kind: "account", row: a })}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() =>
+                            setFinancialAction({ kind: "adjust", account: a })
+                          }
+                        >
+                          Ajustar saldo atual
+                        </button>
+                        <button
+                          disabled={operation}
+                          onClick={() =>
+                            void archive("accounts", a.id, a.is_active)
+                          }
+                        >
+                          {a.is_active ? "Arquivar" : "Reativar"}
+                        </button>
+                      </div>
+                    </details>
+                  ))}
+              </>
+            }
+            onBack={() => setPage("home")}
+            section={page === "wallet" ? walletSection : planningSection}
+            onSection={
+              page === "wallet" ? setWalletSection : setPlanningSection
+            }
             goalsContent={goalsContent}
             action={planningAction}
             setAction={setPlanningAction}
@@ -617,8 +639,8 @@ export default function App() {
           onClose={() => setInvestmentOperation(null)}
           onCreate={() => {
             setInvestmentOperation(null);
-            setPlanningSection("reserve");
-            setPage("planning");
+            setWalletSection("reserve");
+            setPage("wallet");
           }}
         />
       )}
@@ -649,8 +671,8 @@ export default function App() {
           onAction={(kind) => {
             if (kind === "investments") {
               setSetup(false);
-              setPlanningSection("reserve");
-              setPage("planning");
+              setWalletSection("reserve");
+              setPage("wallet");
             } else if (kind === "account") setEditor({ kind: "account" });
             else if (kind === "schedule")
               setFinancialAction({ kind: "schedule" });
@@ -679,14 +701,12 @@ export default function App() {
             (g) => g.is_active && !g.is_emergency_reserve,
           )}
           onClose={() => setQuick(false)}
-          invoices={invoices(
-            planning.data.credit_cards,
-            planning.data.card_purchases,
-            planning.data.card_invoices,
+          invoices={planningInvoices(
+            planning.data,
             planning.data.card_payments,
-            planning.data.card_adjustments,
+            today(),
           )
-            .filter((i) => i.pending > 0)
+            .filter((i) => (i.payable ?? i.pending) > 0)
             .map((i) => ({
               id: i.card_id + ":" + i.month,
               name:

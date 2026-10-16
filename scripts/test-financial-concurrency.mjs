@@ -422,6 +422,201 @@ try {
     ),
     1000,
   );
+  // Subscription operations share card locks with manual baselines and payments.
+  const subscriptionCard = (
+    await q(
+      c1,
+      "insert into credit_cards(name,closing_day,due_day,payment_account_id) values('Assinaturas sintéticas',20,28,$1) returning id",
+      [cash],
+    )
+  )[0].id;
+  const terms = {
+    name: "Mensal sintética",
+    card_id: subscriptionCard,
+    category_id: cat,
+    amount_cents: 2000,
+    start_date: "2026-10-01",
+    billing_day: 13,
+    status: "active",
+    end_date: null,
+  };
+  const subSave = (c, request, subscription, expected = null, extra = {}) =>
+    q(c, "select save_card_subscription($1,$2,$3,$4)", [
+      request,
+      subscription,
+      expected,
+      { ...terms, ...extra },
+    ]);
+  const subResolve = (
+    c,
+    request,
+    subscription,
+    action = "confirm",
+    purchase = null,
+    coverage = null,
+  ) =>
+    q(c, "select resolve_card_subscription($1,$2,'2026-10-01',$3,null,$4,$5)", [
+      request,
+      subscription,
+      action,
+      purchase,
+      coverage,
+    ]);
+  const subscription = id(),
+    subscriptionRequest = id();
+  await race(
+    "same subscription create request yields one version",
+    [
+      subSave(c1, subscriptionRequest, subscription),
+      subSave(c2, subscriptionRequest, subscription),
+    ],
+    2,
+  );
+  assert.equal(
+    (
+      await q(
+        c1,
+        "select * from card_subscription_versions where subscription_id=$1",
+        [subscription],
+      )
+    ).length,
+    1,
+  );
+  await race(
+    "concurrent future subscription edits reject stale expected version",
+    [
+      subSave(c1, id(), subscription, subscriptionRequest, {
+        effective_month: "2026-11-01",
+        amount_cents: 2300,
+      }),
+      subSave(c2, id(), subscription, subscriptionRequest, {
+        effective_month: "2026-11-01",
+        amount_cents: 2400,
+      }),
+    ],
+    1,
+  );
+  await race(
+    "different confirmations of one monthly charge create one purchase and no bank debit",
+    [subResolve(c1, id(), subscription), subResolve(c2, id(), subscription)],
+    2,
+  );
+  const occurrence = (
+    await q(
+      c1,
+      "select * from card_subscription_occurrences where subscription_id=$1",
+      [subscription],
+    )
+  )[0];
+  assert.equal(
+    (
+      await q(c1, "select * from card_purchases where id=$1", [
+        occurrence.purchase_id,
+      ])
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      await q(c1, "select * from transactions where id=$1", [
+        occurrence.purchase_id,
+      ])
+    ).length,
+    0,
+  );
+  const linkPurchase = id();
+  await q(c1, "select create_card_purchase($1,$2)", [
+    linkPurchase,
+    {
+      card_id: subscriptionCard,
+      category_id: cat,
+      amount_cents: 3000,
+      purchase_date: "2026-10-13",
+      installments: 1,
+    },
+  ]);
+  const linkA = id(),
+    linkB = id();
+  await subSave(c1, id(), linkA);
+  await subSave(c1, id(), linkB);
+  await race(
+    "one existing purchase cannot be linked to two subscriptions concurrently",
+    [
+      subResolve(c1, id(), linkA, "link", linkPurchase),
+      subResolve(c2, id(), linkB, "link", linkPurchase),
+    ],
+    1,
+  );
+  const baselineSubscription = id();
+  await subSave(c1, id(), baselineSubscription);
+  await race(
+    "manual invoice and included confirmation reconcile under the same lock",
+    [
+      q(
+        c1,
+        "select set_card_invoice($1,$2,10000,'2026-10-28','Fatura sintética')",
+        [id(), subscriptionCard],
+      ),
+      subResolve(c2, id(), baselineSubscription, "confirm", null, "included"),
+    ],
+    2,
+  );
+  assert.equal(
+    Number(
+      (
+        await q(admin, "select invoice_total($1,'2026-10',$2) n", [
+          subscriptionCard,
+          a,
+        ])
+      )[0].n,
+    ),
+    10000,
+  );
+  const paymentId = id();
+  await race(
+    "same subscription invoice payment is one bank debit",
+    [
+      q(c1, "select pay_card_invoice($1,$2,'2026-10',$3,10000,'2026-10-15')", [
+        paymentId,
+        subscriptionCard,
+        cash,
+      ]),
+      q(c2, "select pay_card_invoice($1,$2,'2026-10',$3,10000,'2026-10-15')", [
+        paymentId,
+        subscriptionCard,
+        cash,
+      ]),
+    ],
+    2,
+  );
+  assert.equal(
+    (await q(c1, "select * from transactions where id=$1", [paymentId])).length,
+    1,
+  );
+  const paidSubscription = id();
+  await subSave(c1, id(), paidSubscription);
+  await subResolve(c1, id(), paidSubscription, "confirm", null, "included");
+  assert.equal(
+    Number(
+      (
+        await q(admin, "select invoice_total($1,'2026-10',$2) n", [
+          subscriptionCard,
+          a,
+        ])
+      )[0].n,
+    ),
+    10000,
+  );
+  await assert.rejects(subResolve(cb, id(), subscription));
+  for (const table of [
+    "card_subscriptions",
+    "card_subscription_versions",
+    "card_subscription_occurrences",
+  ])
+    assert.equal((await q(cb, "select * from " + table)).length, 0);
+  checks.push(
+    "subscription RLS, fully paid baseline and explicit purchase evidence",
+  );
   await assert.rejects(pay(cb, id(), r));
   await assert.rejects(
     q(cb, "select create_financial_transaction($1,$2)", [req, payload]),
