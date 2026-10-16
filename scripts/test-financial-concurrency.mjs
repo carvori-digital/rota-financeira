@@ -80,7 +80,9 @@ try {
       "-l",
       root + "/server.log",
       "-o",
-      `-p ${port} -h 127.0.0.1 -k ${root}`,
+      // pg_ctl parses -o again: quote socket paths that contain spaces.
+      // Windows tests use TCP only and do not need a Unix socket directory.
+      `-p ${port} -h 127.0.0.1${process.platform === "win32" ? ' -k ""' : ` -k "${root}"`}`,
       "-w",
       "start",
     ],

@@ -1,28 +1,33 @@
 {
   "audited_on": "2026-10-15",
-  "collected_at": "2026-10-15T13:42:15.572Z",
+  "collected_at": "2026-10-15T18:24:55.382Z",
   "base": "fe99595b49cf92f3e1b50a15679277d6cae8ecfc",
   "production_reference_supplied_by_user": "main d203c47",
   "branch": "codex/auditoria-estrutural-financeira",
   "scope": {
-    "synthetic_data_only": true,
-    "remote_financial_database_access": false,
+    "synthetic_data_only": false,
+    "remote_financial_database_access": true,
     "remote_migrations": false,
     "production_data_changes": false,
     "merge": false,
     "deploy": false,
-    "push": false
+    "push": false,
+    "test_data_synthetic_only": true,
+    "remote_financial_database_read_only": true
   },
   "approval": {
     "structural_audit": false,
     "hotfix_013_standalone_ready": false,
-    "report": "docs/auditoria-estrutural-financeira.md"
+    "report": "docs/auditoria-estrutural-financeira.md",
+    "operational_release_preparation": true,
+    "production_database_changes_authorized": false
   },
   "runtime": {
-    "node": "v24.19.0",
-    "postgres_native_package": "@embedded-postgres/linux-x64@17.10.0-beta.17",
+    "node": "v25.2.1",
+    "platform": "win32",
+    "postgres_native_package": "@embedded-postgres/windows-x64@17.10.0-beta.17",
     "pg_node_module": "pg@8",
-    "browser": "Chromium /usr/bin/chromium"
+    "browser": "Installed Google Chrome / Playwright Chromium driver"
   },
   "historical_migrations": [
     {
@@ -135,40 +140,55 @@
   "verification": {
     "global_final": {
       "command": "npm test",
-      "status": "failed_in_ui",
+      "status": "passed",
       "unit_suites": 10,
       "database_suites": 8,
-      "ui_passed": 46,
-      "ui_failed": 1,
+      "unit_passed": 67,
+      "database_passed": 75,
+      "ui_passed": 47,
+      "ui_failed": 0,
       "ui_total": 47,
-      "ui_failure": "Retry after write error: success feedback not found within the wait deadline; focused rerun passed.",
-      "log": "test-results/audit/global-verified.log"
+      "skipped": 0,
+      "log": "test-results/audit/local-global-final.log"
+    },
+    "ui_stability": {
+      "full_runs": 5,
+      "passed_each": 47,
+      "failed": 0,
+      "assertions_removed": false,
+      "deadlines_increased": false,
+      "profile": "threads, maxWorkers=1, fileParallelism=false",
+      "logs": [
+        "test-results/audit-local-ui-unrestricted.log",
+        "test-results/audit/local-global-1.log",
+        "test-results/audit/local-ui-repeat-1.log",
+        "test-results/audit/local-ui-repeat-2.log",
+        "test-results/audit/local-global-final.log"
+      ],
+      "original_feedback_timeout_reproduced": false,
+      "root_cause_of_original_timeout": "not established"
     },
     "structural_pure": {
       "passed": 8,
       "failed": 0
     },
     "structural_database": {
-      "subcases_passed": 12,
-      "total_with_parent": 13,
-      "failed": 0
-    },
-    "ui_isolated": {
-      "passed": 47,
+      "total_with_parent": 17,
       "failed": 0,
-      "log": "test-results/audit/ui-threads.log"
+      "new_standalone_cases": 4,
+      "log": "test-results/audit/local-global-final.log"
     },
-    "ui_failed_case_focused": {
-      "passed": 1,
-      "skipped": 29,
-      "log": "test-results/audit/ui-retry-focused.log"
-    },
-    "ui_profile": {
-      "pool": "threads",
-      "maxWorkers": 1,
-      "fileParallelism": false,
-      "timeout_ms": 5000,
-      "assertions_removed": false
+    "compatibility_012_013_014": {
+      "status": "passed",
+      "synthetic": true,
+      "bank_rows_unchanged_by_upgrade": true,
+      "opening_balances_unchanged": true,
+      "pending_income_confirmation_idempotent": true,
+      "pending_income_cancellation_no_cash": true,
+      "migration_013_updated_at": "Existing backfill triggers timestamp update; financial facts preserved.",
+      "migration_014_existing_occurrence_columns_including_timestamps": "preserved",
+      "historical_migrations_edited": false,
+      "log": "test-results/audit/local-global-final.log"
     },
     "concurrency_final": {
       "passed": 11,
@@ -185,12 +205,12 @@
         "concurrent reconciliation of an existing transfer adds one position and no bank debit",
         "RLS across simultaneous A/B sessions and replay keys"
       ],
-      "engine": "PostgreSQL 17.10 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit",
+      "engine": "PostgreSQL 17.10 on x86_64-windows, compiled by msvc-19.44.35226, 64-bit",
       "host": "127.0.0.1",
       "synthetic": true,
       "remote_database": false,
-      "command": "PG_TEST_BIN=<local PostgreSQL 17 bin> PG_TEST_MODULE=<local pg module> npm run test:audit:concurrency",
-      "log": "test-results/audit/concurrency-serial.log"
+      "command": "PG_TEST_BIN=<local portable bin> PG_TEST_MODULE=<local pg module> npm run test:audit:concurrency",
+      "log": "test-results/audit/local-concurrency.log"
     },
     "mobile_final": {
       "passed": 70,
@@ -269,19 +289,415 @@
       "errors": [],
       "outbound": [],
       "backend": "PGlite com RLS authenticated e migrations 001–014; Auth e HTTP simulados; nenhum acesso remoto",
-      "command": "BROWSER_EXECUTABLE=/usr/bin/chromium npm run test:mobile",
-      "log": "test-results/audit/mobile-serial.log"
+      "command": "npm run test:mobile",
+      "log": "test-results/audit/local-mobile-serial.log",
+      "previous_attempt": {
+        "status": "timeout",
+        "stage": "click realized/skipped recurring summary",
+        "log": "test-results/audit/local-mobile.log",
+        "root_cause": "not established; serial rerun passed without deadline or assertion changes"
+      }
     },
     "typecheck": "passed",
+    "typecheck_log": "test-results/audit/local-typecheck.log",
     "lint": "passed",
+    "lint_log": "test-results/audit/local-lint-final.log",
     "build": "passed; bundle-size warning only",
+    "build_log": "test-results/audit/local-build.log",
     "whitespace": "passed",
-    "previous_timing_failures": "Default forks UI and one-worker forks had nondeterministic timeouts (45/47). Simultaneous native/browser tests also timed out. Native and browser passed separately with original time limits. UI passed in threads with one worker; that profile is now the default, but the last full run still had one UI feedback wait failure (46/47); the focused case passed. Screenshot failure handler masked the earlier browser error; that error was not inferred as a financial defect."
+    "auth_postgrest_isolated": {
+      "status": "passed",
+      "passed": 12,
+      "host": "127.0.0.1",
+      "auth_mock": false,
+      "http_mock": false,
+      "financial_data_synthetic": true,
+      "local_windows_socket_adapter": true,
+      "log": "test-results/release-runtime/integration.log"
+    },
+    "sandbox_attempts": {
+      "status": "environment_failure_before_tests",
+      "reason": "Vite realpath EPERM",
+      "log": "test-results/audit-local-ui-baseline.log"
+    }
   },
   "unresolved": [
-    "Legacy obligation terms/amounts and multi-installment allocations absent from historical records cannot be inferred safely.",
-    "Hosted Auth/PostgREST integration has not been exercised; local SQL roles and HTTP/auth mocks were used.",
-    "Safari and installed iOS PWA were not exercised.",
-    "The last global UI regression was not green (46/47); isolated reruns do not establish suite stability."
+    "Awaiting explicit human confirmation before the first production database migration.",
+    "Physical iPhone validation is prepared and remains to be performed after publication."
+  ],
+  "previous_execution_62d69ac": {
+    "collected_at": "2026-10-15T13:42:15.572Z",
+    "runtime": {
+      "node": "v24.19.0",
+      "postgres_native_package": "@embedded-postgres/linux-x64@17.10.0-beta.17",
+      "pg_node_module": "pg@8",
+      "browser": "Chromium /usr/bin/chromium"
+    },
+    "scope": {
+      "synthetic_data_only": true,
+      "remote_financial_database_access": false,
+      "remote_migrations": false,
+      "production_data_changes": false,
+      "merge": false,
+      "deploy": false,
+      "push": false
+    },
+    "verification": {
+      "global_final": {
+        "command": "npm test",
+        "status": "failed_in_ui",
+        "unit_suites": 10,
+        "database_suites": 8,
+        "ui_passed": 46,
+        "ui_failed": 1,
+        "ui_total": 47,
+        "ui_failure": "Retry after write error: success feedback not found within the wait deadline; focused rerun passed.",
+        "log": "test-results/audit/global-verified.log"
+      },
+      "structural_pure": {
+        "passed": 8,
+        "failed": 0
+      },
+      "structural_database": {
+        "subcases_passed": 12,
+        "total_with_parent": 13,
+        "failed": 0
+      },
+      "ui_isolated": {
+        "passed": 47,
+        "failed": 0,
+        "log": "test-results/audit/ui-threads.log"
+      },
+      "ui_failed_case_focused": {
+        "passed": 1,
+        "skipped": 29,
+        "log": "test-results/audit/ui-retry-focused.log"
+      },
+      "ui_profile": {
+        "pool": "threads",
+        "maxWorkers": 1,
+        "fileParallelism": false,
+        "timeout_ms": 5000,
+        "assertions_removed": false
+      },
+      "concurrency_final": {
+        "passed": 11,
+        "checks": [
+          "same recurring request concurrently: one debit, two successful exact replies",
+          "different requests for one full obligation: never two debits",
+          "concurrent partials cannot exceed amount owed",
+          "concurrent debt payments cannot exceed remaining principal",
+          "concurrent invoice payments cannot exceed invoice due",
+          "editing future rule and paying captured obligation preserve original expense",
+          "transfer request retries concurrently preserve one origin and destination movement",
+          "two balance reconciliations with the same expected balance reject the stale one",
+          "concurrent withdrawals with the same expected position cannot duplicate credit",
+          "concurrent reconciliation of an existing transfer adds one position and no bank debit",
+          "RLS across simultaneous A/B sessions and replay keys"
+        ],
+        "engine": "PostgreSQL 17.10 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit",
+        "host": "127.0.0.1",
+        "synthetic": true,
+        "remote_database": false,
+        "command": "PG_TEST_BIN=<local PostgreSQL 17 bin> PG_TEST_MODULE=<local pg module> npm run test:audit:concurrency",
+        "log": "test-results/audit/concurrency-serial.log"
+      },
+      "mobile_final": {
+        "passed": 70,
+        "checks": [
+          "375px criar cartão",
+          "investimento com taxa fixa, aporte, resgate e sincronização atômicos via UI/RLS",
+          "16 fluxos: criar/editar cartão, compra parcelada, fatura, pagamento, criar/editar dívida, pagamento, criar/editar recorrência, realizar/pular, reserva, receita/despesa, transferência, aporte, repetição atômica e conta lembrada",
+          "programada vencida não altera caixa; editar; confirmar uma vez; cancelar; parcela 8/14; ajuste negativo rastreável; configuração rápida",
+          "375px Home",
+          "375px Visão do mês",
+          "375px Programadas",
+          "375px Cartões",
+          "375px Dívidas e parcelas",
+          "375px Recorrentes",
+          "375px Reserva e investimentos",
+          "375px compra parcelada modal",
+          "375px investimento modal",
+          "375px Aportar em investimento formulário",
+          "375px Aportar em investimento confirmação",
+          "375px Resgatar investimento formulário",
+          "375px Resgatar investimento confirmação",
+          "375px exclusão confirmada",
+          "375px reconciliação de conta",
+          "375px diferença de saldo",
+          "375px pagamento dívida modal",
+          "390px Home",
+          "390px Visão do mês",
+          "390px Programadas",
+          "390px Cartões",
+          "390px Dívidas e parcelas",
+          "390px Recorrentes",
+          "390px Reserva e investimentos",
+          "390px compra parcelada modal",
+          "390px investimento modal",
+          "390px Aportar em investimento formulário",
+          "390px Aportar em investimento confirmação",
+          "390px Resgatar investimento formulário",
+          "390px Resgatar investimento confirmação",
+          "390px exclusão confirmada",
+          "390px reconciliação de conta",
+          "390px diferença de saldo",
+          "390px pagamento dívida modal",
+          "430px Home",
+          "430px Visão do mês",
+          "430px Programadas",
+          "430px Cartões",
+          "430px Dívidas e parcelas",
+          "430px Recorrentes",
+          "430px Reserva e investimentos",
+          "430px compra parcelada modal",
+          "430px investimento modal",
+          "430px Aportar em investimento formulário",
+          "430px Aportar em investimento confirmação",
+          "430px Resgatar investimento formulário",
+          "430px Resgatar investimento confirmação",
+          "430px exclusão confirmada",
+          "430px reconciliação de conta",
+          "430px diferença de saldo",
+          "430px pagamento dívida modal",
+          "375px Cemig quitada sem residual nem rótulo interno",
+          "375px pagamento parcial por regra canônica",
+          "375px pular ocorrência sem pagamento",
+          "375px previsão variável do próximo mês",
+          "375px reserva aposentada ausente e nova Caixinha preservada",
+          "390px Cemig quitada sem residual nem rótulo interno",
+          "390px pagamento parcial por regra canônica",
+          "390px pular ocorrência sem pagamento",
+          "390px previsão variável do próximo mês",
+          "390px reserva aposentada ausente e nova Caixinha preservada",
+          "430px Cemig quitada sem residual nem rótulo interno",
+          "430px pagamento parcial por regra canônica",
+          "430px pular ocorrência sem pagamento",
+          "430px previsão variável do próximo mês",
+          "430px reserva aposentada ausente e nova Caixinha preservada"
+        ],
+        "errors": [],
+        "outbound": [],
+        "backend": "PGlite com RLS authenticated e migrations 001–014; Auth e HTTP simulados; nenhum acesso remoto",
+        "command": "BROWSER_EXECUTABLE=/usr/bin/chromium npm run test:mobile",
+        "log": "test-results/audit/mobile-serial.log"
+      },
+      "typecheck": "passed",
+      "lint": "passed",
+      "build": "passed; bundle-size warning only",
+      "whitespace": "passed",
+      "previous_timing_failures": "Default forks UI and one-worker forks had nondeterministic timeouts (45/47). Simultaneous native/browser tests also timed out. Native and browser passed separately with original time limits. UI passed in threads with one worker; that profile is now the default, but the last full run still had one UI feedback wait failure (46/47); the focused case passed. Screenshot failure handler masked the earlier browser error; that error was not inferred as a financial defect."
+    },
+    "unresolved": [
+      "Legacy obligation terms/amounts and multi-installment allocations absent from historical records cannot be inferred safely.",
+      "Hosted Auth/PostgREST integration has not been exercised; local SQL roles and HTTP/auth mocks were used.",
+      "Safari and installed iOS PWA were not exercised.",
+      "The last global UI regression was not green (46/47); isolated reruns do not establish suite stability."
+    ]
+  },
+  "local_continuation": {
+    "base_commit": "62d69ac",
+    "starting_branch": "main",
+    "starting_commit": "d203c47",
+    "starting_checkout_clean": true,
+    "existing_ignored_files_preserved": true,
+    "fetch_origin": true,
+    "branch_loaded": true,
+    "commit_created": false,
+    "push": false,
+    "report": "docs/continuacao-auditoria-local.md",
+    "legacy_read_only": {
+      "status": "executed",
+      "has_013": false,
+      "has_014": false,
+      "inventory": {
+        "card_payments": 2,
+        "debt_payments": 8,
+        "occurrences": 5,
+        "recurring_rules": 5,
+        "transactions": 58
+      },
+      "postgres_version": "17.11",
+      "read_only": "on",
+      "recorded_cash_review": [
+        {
+          "future_cash_date": true,
+          "future_competence": true,
+          "occurrences": 1,
+          "transaction_present": true,
+          "transaction_status": "pending",
+          "transaction_type": "income"
+        }
+      ],
+      "signals": {
+        "card_payment_without_matching_cash": 0,
+        "debt_payment_without_matching_cash": 0,
+        "debt_payment_without_original_obligation": 8,
+        "future_card_purchase": 0,
+        "legacy_multi_installment_evidence": 0,
+        "occurrence_without_frozen_terms": 5,
+        "recorded_occurrence_without_captured_amount": 5,
+        "recorded_occurrence_without_matching_cash": 1,
+        "recorded_terms_incompatible_with_014_owner_fks": 0,
+        "rule_differs_from_recorded_fact": 0,
+        "stored_obligation_outside_current_calendar": 0
+      },
+      "applied_migrations": [
+        "202610010001",
+        "202610010002",
+        "202610010003",
+        "202610020004",
+        "202610030005",
+        "202610030006",
+        "202610050007",
+        "202610130008",
+        "202610130009",
+        "202610130010",
+        "202610130011",
+        "202610140012"
+      ],
+      "individual_financial_values_exported": false,
+      "automatic_repairs": false,
+      "logs": [
+        "test-results/audit/local-legacy-schema.log",
+        "test-results/audit/local-legacy-counts.log"
+      ]
+    },
+    "changes": [
+      "Quote pg_ctl socket option paths and use TCP only on Windows",
+      "Add metadata/counts read-only diagnostics compatible with 012/013/014",
+      "Add four database cases for diagnostics and future recurring income upgrade",
+      "Update audit reports and evidence"
+    ],
+    "application_code_changed": false,
+    "migrations_changed": false,
+    "artifact_hashes": {
+      "scripts/test-financial-concurrency.mjs": "82e7a492eb65999b8e9f5cde21348e79f3cab6059e59bc465483591387eb363a",
+      "scripts/audit-legacy-schema-readonly.sql": "a83302f0e966e8efd6c86a9d0c79bfddebf3aee0f8b3431d3bd899f63159a166",
+      "scripts/audit-legacy-counts-readonly.sql": "7227ed85c45fb2c5ee9d34854a179d75e7fdda5f8fe6a3fee5bd4ae0ef5abc23",
+      "tests/structural-database.test.mjs": "d2ae286f065d5d1d2938939811c8a724b4a96090f8dcee6b786b287dfe1520fb",
+      "docs/continuacao-auditoria-local.md": "1586e1aff72d8a61398a8d98536519e07129e0a3a9897278d2afc1c1f59e674d",
+      "test-results/audit-local-ui-unrestricted.log": "3054961a3d166ea0aaf7c36ebca423c9fc1d469d7a8339ac16e48e5ace9d408f",
+      "test-results/audit/local-global-1.log": "5fa87410058db61e42916f3f86cceddd5ceafcf1f77c23e4d54d3f5511e72bfa",
+      "test-results/audit/local-ui-repeat-1.log": "ca67f38d50f0d09652274b3ca7d2d4517c78d55aba63ee1a08ae02a9d78fe70f",
+      "test-results/audit/local-ui-repeat-2.log": "8840e65afca3730c79073839b073f19e7facbce7ac6998b4538d226488360119",
+      "test-results/audit/local-global-final.log": "39eaf4ff30ac5c77fc55a3dcca0c03644714e53fb5aef59cdb7275f807650653",
+      "test-results/audit/local-mobile-serial.log": "e95ab500508971eaef9af2f88799be3409a647798bf1e7d7c175d037053ee4c2",
+      "test-results/audit/local-concurrency.log": "ac4b6e16195b8586fc1eb482388f86600ee6d490c9a04fb29649029058351c0c",
+      "test-results/audit/local-legacy-counts.log": "5a3dfcf4e8226e3bd5a00d3e589e3551d51df940fce5f17888353bbb3faa436a",
+      "test-results/audit/local-legacy-schema.log": "3aaffad1c8a12ad1f3cabc62236e9e10f47adbdba8bec9eaf37235359cf9e34d"
+    }
+  },
+  "release_preparation": {
+    "prepared_on": "2026-10-16",
+    "approval_before_production_database_change": "pending",
+    "production": {
+      "commit": "d203c47c50efc5aed26673215f2313912a1c8a47",
+      "vercel_status": "READY",
+      "supabase_project": "lgcozsoenycvifiygdsj",
+      "schema_through": "202610140012"
+    },
+    "critical_tests": {
+      "previous_results_reused": true,
+      "calculation": 67,
+      "database": 75,
+      "ui": 47,
+      "concurrency": 11,
+      "mobile": 70,
+      "auth_postgrest_native": {
+        "passed": 12,
+        "checks": [
+          "Supabase Auth real starts with its own auth schema migrations",
+          "two synthetic users log in through real Auth and receive usable sessions",
+          "PostgREST uses authenticated SQL role and isolates A/B through RLS",
+          "013 + 014 apply in order with real Auth users; PostgREST schema cache reloads",
+          "lost HTTP response + exact retry has one ledger row; altered payload/foreign replay rejected",
+          "ordinary edit/delete through Data API keeps append-only financial history",
+          "recurring partial/complement retains frozen terms and protects old payments",
+          "debt advance allocates three installments with one payment through HTTP RPC",
+          "canonical investment contribution/withdrawal and exact retry work through HTTP",
+          "legacy routes, evidence writes and unauthenticated financial RPC are denied",
+          "expired JWT rejected by PostgREST; real Auth refresh restores Data API access",
+          "real authenticated export keeps tenant ownership across financial modules"
+        ],
+        "synthetic": true,
+        "remote_financial_writes": false,
+        "host": "127.0.0.1",
+        "auth": "Supabase Auth v2.197.0 native",
+        "postgrest": "native",
+        "postgres": "PostgreSQL 17.11 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit"
+      },
+      "real_data_restore_upgrade": {
+        "backup": "test-results/consolidation-current-2026-10-16-1792119632864.json",
+        "sha256": "1ccfdaa2b93bec2b9ce70b9d1c90baf81a67335fbda988e7e2c715ad3a05c0f3",
+        "reference_date": "2026-10-16",
+        "financial_tables": 23,
+        "counts": {
+          "accounts": 5,
+          "card_adjustments": 0,
+          "card_invoices": 2,
+          "card_payments": 2,
+          "card_purchase_audit": 3,
+          "card_purchases": 25,
+          "categories": 48,
+          "classification_reviews": 2,
+          "credit_cards": 3,
+          "debt_payments": 8,
+          "debts": 17,
+          "goal_contributions": 0,
+          "goals": 0,
+          "investment_movements": 1,
+          "investment_operations": 2,
+          "investment_rates": 0,
+          "investment_reconstructions": 0,
+          "investments": 1,
+          "recurring_items": 5,
+          "recurring_occurrences": 5,
+          "report_month_confirmations": 0,
+          "reserve_account_links": 0,
+          "transactions": 58
+        },
+        "backup_restored_exactly": true,
+        "migrations_013_014_passed": true,
+        "existing_financial_rows_preserved": true,
+        "bank_and_wealth_preserved": true,
+        "legacy_debt_allocations_invented": false,
+        "remote_writes": false,
+        "engine": "PGlite disposable local PostgreSQL"
+      }
+    },
+    "backup_scope": "Every existing public financial table (23) and schema metadata; excludes Auth/storage/platform data",
+    "source_auth": {
+      "tag": "v2.197.0",
+      "archive_sha256": "359a3235b3280e8c8c175559450a07b72249504edc55b266ab9be1776470526b",
+      "local_windows_adapter": "Only Unix SO_REUSEPORT listener option removed; auth/JWT/session/database logic unchanged"
+    },
+    "legacy_decision": "Preserve originals; missing historical evidence does not automatically block unrelated operations. Do not infer amounts or allocations.",
+    "migrations_remote": false,
+    "financial_data_changed": false,
+    "published": false,
+    "maintenance_artifact_prepared": true,
+    "recovery": "Keep maintenance and fix forward after schema upgrade; never reset or overwrite recent financial data.",
+    "iphone_physical_test": false,
+    "report": "docs/publicacao-operacional.md",
+    "logs": [
+      "test-results/release-runtime/integration.log",
+      "test-results/release/backup-restore.log",
+      "test-results/release/migrations-dry-run.log",
+      "test-results/release/lint-release.log"
+    ],
+    "additional_test_source_hashes": {
+      "scripts/test-release-integration.mjs": "da09f35daf52a7fb95c64f37128c456fd0388cb3f4998f896e71d6e8c476aa52",
+      "scripts/rehearse-release-snapshot.mjs": "784f18b2e8cf12caf4ca8962830b97fe480d82f7eb6d26097c3bda3d6443b927",
+      "scripts/release-legacy-preflight-readonly.sql": "db187c4fa788f6380e7abbf41bdcefab41e6454d03412800e0ca9c2cc8a77756"
+    }
+  },
+  "previous_local_unresolved": [
+    "Isolated real Auth/PostgREST chain remains untested: no running Docker daemon/WSL or configured isolated backend/users.",
+    "Five legacy occurrences lack original obligation amount/terms; eight debt payments lack original obligation values. External evidence and recorded reconciliation decisions remain required.",
+    "The future pending income signal is compatible with legacy scheduling; no production corruption or automatic repair is inferred.",
+    "Safari/iPhone and installed iOS PWA were not exercised.",
+    "Original UI feedback timeout and first mobile visibility timeout have no proven root cause; five UI suite runs and the serial mobile run passed.",
+    "Frontend + 013 + 014 deployment/cache planning, review, backup and explicit operational authorization remain required."
   ]
 }

@@ -1,11 +1,15 @@
 # Auditoria estrutural financeira — 15/10/2026
 
+**Atualização operacional de 16/10/2026:** [publicacao-operacional.md](publicacao-operacional.md). A missão de liberação resolveu a integração isolada (12/12) e verificou backup/restauração com 013+014 sobre cópia dos dados reais, sem alterar produção. Os legados podem ser preservados sem bloquear os demais módulos. Publicação aguarda confirmação antes da primeira migration remota; as restrições da auditoria geral abaixo são histórico, não um novo bloqueio operacional automático.
+
 **AUDITORIA ESTRUTURAL APROVADA: NÃO.**
 **HOTFIX 013 APTO PARA PUBLICAÇÃO: NÃO.**
 
+**Continuação local em 15/10/2026:** resultados atuais em [continuacao-auditoria-local.md](continuacao-auditoria-local.md) e na seção 9. O resultado 46/47 abaixo é histórico da entrega `62d69ac`; as novas execuções globais e de UI passaram. Houve diagnóstico remoto autorizado, estritamente somente leitura. Auth/PostgREST isolados e conferência dos legados ainda bloqueiam publicação.
+
 A base `fe99595b49cf92f3e1b50a15679277d6cae8ecfc`, da branch `codex/hotfix-reserva-cemig`, contém falhas financeiras reproduzidas além da Cemig. Esta entrega prepara correções na branch local `codex/auditoria-estrutural-financeira`, incluindo a migration incremental **014**, sem modificar 001–013. A aprovação operacional continua bloqueada pelos limites históricos e pelos ensaios de integração descritos ao final. O hotfix 013 isolado não resolve as falhas P0 abaixo.
 
-Referência de produção informada: `main d203c47`. Não houve acesso ao banco financeiro de produção, alteração de dados reais, migration remota, push desta auditoria, merge ou deploy. Os bancos usados foram descartáveis e continham somente dados sintéticos. A configuração Git da Vercel mantém desabilitado o deploy das duas branches de trabalho.
+Referência de produção informada: `main d203c47`. Na entrega original `62d69ac`, não houve acesso ao banco financeiro remoto. Na continuação local houve somente diagnóstico agregado autorizado em transações `READ ONLY`, sem alterar dados financeiros. Não houve migration remota, push desta auditoria, merge ou deploy. Todos os testes de gravação usaram bancos descartáveis e dados sintéticos. A configuração Git da Vercel mantém desabilitado o deploy das duas branches de trabalho.
 
 ## 1. Entidades, relações e invariantes
 
@@ -114,7 +118,7 @@ Os exemplos provam defeitos da base e proteção dos cenários corrigidos. Não 
 
 Migrations 001–013 foram comparadas aos blobs de `fe99595b` e permanecem intactas. Nenhum reparo automático de transações antigas, nenhum recálculo de saldo inicial e nenhuma importação de dados reais fazem parte desta entrega.
 
-## 6. Testes e resultados
+## 6. Testes e resultados da entrega 62d69ac (histórico)
 
 Os resultados finais e fingerprints também estão em `evidencias-auditoria-estrutural.json`. Logs completos e capturas ficam localmente em `test-results/`, que é ignorado pelo Git.
 
@@ -173,11 +177,19 @@ O ensaio concorrente exige os binários nativos PostgreSQL e o módulo Node `pg`
 | Renegociação entre contratos e reconstrução patrimonial histórica integral        | **Capacidade não certificada**, sem novo fluxo implementado                        | Definir a intenção e a evidência de vínculo antes de afirmar suporte. Não foi criada uma arquitetura nova de renegociação como parte de correções mínimas.                                                            |
 | Contenção/crescimento de auditoria e longa série recorrente                       | **Risco de escala hipotético**                                                     | Medir em fixture sintética de volume representativo se necessário. Os testes funcionais/concorrentes não constituem benchmark de produção.                                                                            |
 
-**Pendência P2 de validação:** estabilizar o teste de feedback após erro/retry e obter uma regressão global completa verde, sem retirar asserções. O diagnóstico ainda não comprova defeito financeiro nem uma correção da instabilidade.
+**Pendência P2 na entrega original:** obter a regressão global verde. A continuação local obteve novas execuções completas verdes, sem retirar asserções ou ampliar prazos; ver seção 9. A causa do timeout original não foi reproduzida nem apresentada como defeito financeiro corrigido.
 
 **Recomendação:** manter o bloqueio de publicação. Revisar a 014 e o diff de aplicação, obter a regressão global estável, concluir os ensaios isolados de integração/plataforma e definir o tratamento dos legados ambíguos antes de reconsiderar aprovação. Não fazer rollback destrutivo da migration: remover tabelas de evidência ou apagar movimentos para obter compatibilidade perderia histórico.
 
-Esta entrega conclui a investigação e prepara correções verificáveis dentro do escopo autorizado. Não aprova uma implantação que dependa de fatos históricos indisponíveis nem executa ações remotas.
+Esta entrega conclui a investigação e prepara correções verificáveis dentro do escopo autorizado. Não aprova uma implantação que dependa de fatos históricos indisponíveis nem executa mudanças remotas.
+
+## 9. Continuação local autorizada — 15/10/2026
+
+A branch remota foi carregada no commit `62d69ac`, após confirmar checkout limpo em `main d203c47`. Arquivos locais ignorados foram preservados. A regressão global passou e a UI passou repetidamente 47/47, mantendo o perfil e os prazos originais. O PostgreSQL 17.10 nativo passou os 11 cenários de concorrência; foi corrigido somente o executor local para caminhos com espaços no Windows. Não houve mudança na aplicação nem nas migrations 001–014.
+
+O diagnóstico agregado remoto confirmou schema 001–012, PostgreSQL 17.11 e transação somente leitura. Há cinco ocorrências sem valor/termos originalmente capturados e oito pagamentos de dívida sem obrigação original capturada. A ocorrência ligada a movimento não realizado é uma receita futura `pending`, compatível com agendamento legado, sem comprovação de corrupção. Foi acrescentada regressão sintética de upgrade 012→013→014, preservação do livro bancário, confirmação idempotente e cancelamento desse estado. Na 013, o backfill existente atualiza `updated_at` da ocorrência pelo trigger; a 014 preserva todos os campos anteriores, inclusive esse timestamp. Nenhuma migration histórica foi editada.
+
+Auth/PostgREST reais isolados permanecem sem validação: Docker sem daemon, WSL ausente e nenhum backend isolado/usuários A/B configurados. O acesso ao projeto vinculado foi usado exclusivamente para leitura e não substitui essa integração. Safari/iOS/PWA instalada também continuam pendentes. O relatório objetivo, evidências atuais, ressalvas dos ensaios e condições para publicação estão em [continuacao-auditoria-local.md](continuacao-auditoria-local.md). **Publicação continua bloqueada.**
 
 **AUDITORIA ESTRUTURAL APROVADA: NÃO.**
 **HOTFIX 013 APTO PARA PUBLICAÇÃO: NÃO.**

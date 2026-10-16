@@ -7,6 +7,136 @@ import { emptyPlanning } from "../src/features/planning/types.ts";
 import { monthlyCommitments } from "../src/features/planning/commitments.ts";
 import { projection } from "../src/features/planning/calculations.ts";
 
+for (const [label, through, has013, has014] of [
+  ["012", "202610150013", false, false],
+  ["013", "202610150014", true, false],
+  ["014", "9999", true, true],
+]) {
+  test(`legacy diagnostic: read-only aggregate counts on ${label}`, async () => {
+    const { db, q, rule } = await financialFixture(through);
+    try {
+      const r = await rule();
+      await q("select resolve_recurring($1,$2,'2026-10-13',false)", [id(), r]);
+      const before = await q("select * from transactions order by id");
+      const results = await db.exec(
+        await readFile("scripts/audit-legacy-counts-readonly.sql", "utf8"),
+      );
+      const report = results
+        .flatMap((result) => result.rows)
+        .find((row) => row.diagnostic).diagnostic;
+      assert.equal(report.read_only, "on");
+      assert.equal(report.has_013, has013);
+      assert.equal(report.has_014, has014);
+      assert.equal(report.inventory.transactions, 1);
+      assert.equal(report.signals.recorded_occurrence_without_matching_cash, 0);
+      assert.equal(
+        report.signals.recorded_occurrence_without_captured_amount,
+        has013 ? 0 : 1,
+      );
+      assert.equal(
+        report.signals.occurrence_without_frozen_terms,
+        has014 ? 0 : 1,
+      );
+      assert.deepEqual(
+        await q("select * from transactions order by id"),
+        before,
+      );
+    } finally {
+      await db.close();
+    }
+  });
+}
+
+test("012 → 013 → 014 preserves legacy future recurring income until explicit confirmation or cancellation", async () => {
+  const { db, q, as, a, cash, income, bank } =
+    await financialFixture("202610150013");
+  try {
+    const requests = [id(), id()],
+      rules = [id(), id()];
+    for (let i = 0; i < 2; i++) {
+      await q(
+        "insert into transactions(id,type,account_id,category_id,amount_cents,transaction_date,status,description) values($1,'income',$2,$3,7000,'2026-11-13','pending','Receita sintética futura')",
+        [requests[i], cash, income],
+      );
+      await q("select repeat_transaction($1,$2,$3,true)", [
+        requests[i],
+        rules[i],
+        { recurrence_frequency: "monthly" },
+      ]);
+    }
+    const ledger = await q("select * from transactions order by id");
+    let occurrences = await q(
+      "select * from recurring_occurrences order by id",
+    );
+    const balance = await bank();
+    for (const file of [
+      "202610150013_recurring_occurrence_amounts.sql",
+      "202610150014_financial_boundaries.sql",
+    ]) {
+      await db.exec("reset role");
+      await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
+      await as(a);
+      assert.deepEqual(
+        await q("select * from transactions order by id"),
+        ledger,
+      );
+      assert.equal(await bank(), balance);
+      const migrated = await q(
+        "select * from recurring_occurrences order by id",
+      );
+      for (let i = 0; i < occurrences.length; i++) {
+        for (const key of Object.keys(occurrences[i])) {
+          // 013 already backfills amount through protect_row, updating this
+          // metadata timestamp. 014 must preserve every column from 013.
+          if (file.startsWith("202610150013") && key === "updated_at") {
+            assert.ok(migrated[i][key] >= occurrences[i][key]);
+            continue;
+          }
+          assert.deepEqual(migrated[i][key], occurrences[i][key]);
+        }
+        assert.equal(Number(migrated[i].amount_cents), 7000);
+      }
+      occurrences = migrated;
+    }
+    const request = id();
+    await q(
+      "select record_recurring_payment($1,$2,'2026-11-13',7000,'2026-10-15')",
+      [request, rules[0]],
+    );
+    await q(
+      "select record_recurring_payment($1,$2,'2026-11-13',7000,'2026-10-15')",
+      [request, rules[0]],
+    );
+    await q("select resolve_recurring($1,$2,'2026-11-13',true)", [
+      id(),
+      rules[1],
+    ]);
+    assert.equal(await bank(), balance + 7000);
+    assert.equal((await q("select * from transactions")).length, 2);
+    assert.equal(
+      (await q("select status from transactions where id=$1", [requests[0]]))[0]
+        .status,
+      "realized",
+    );
+    assert.equal(
+      (await q("select status from transactions where id=$1", [requests[1]]))[0]
+        .status,
+      "cancelled",
+    );
+    assert.equal(
+      (
+        await q(
+          "select due_date::text d from recurring_occurrences where recurring_item_id=$1",
+          [rules[0]],
+        )
+      )[0].d,
+      "2026-11-13",
+    );
+  } finally {
+    await db.close();
+  }
+});
+
 test("structural audit: preserve facts, snapshots, allocations, request binding and user isolation", async (t) => {
   const f = await financialFixture("202610150014"),
     { db, q, as, a, b, cash, other, cat, income, rule, bank } = f;
