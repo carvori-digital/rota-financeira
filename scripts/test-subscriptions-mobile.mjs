@@ -62,7 +62,7 @@ const fit = async (name) => {
 };
 try {
   await page.goto("http://127.0.0.1:5177", { waitUntil: "domcontentloaded" });
-  await page.getByText("Saldo agora", { exact: true }).waitFor();
+  await page.getByText("Posição líquida agora", { exact: true }).waitFor();
   for (const width of [320, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Carteira").click();

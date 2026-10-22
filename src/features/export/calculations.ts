@@ -1,3 +1,4 @@
+import { overdraftPosition } from "../overdraft/calculations.ts";
 import type { ExportSnapshot } from "./snapshot.ts";
 import { monthlyCommitments } from "../planning/commitments.ts";
 import { periodReport, experienceReport } from "../experience/calculations.ts";
@@ -140,6 +141,7 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
             "destination_account_id",
             "amount_cents",
             "adjustment_delta_cents",
+            "financial_charge",
             "status",
             "planning_group",
             "financial_commitment",
@@ -266,6 +268,7 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
               "destination_account_id",
               "amount_cents",
               "adjustment_delta_cents",
+              "financial_charge",
               "status",
               "payment_reference",
               "financial_commitment",
@@ -379,6 +382,49 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
       ),
     },
     projected: { as_of: asOf, months: r.months },
+    banking: r.wealth.bank,
+    overdraft_versions: (s.plan.account_overdraft_versions ?? []).map((v) => ({
+      id: v.id,
+      created_at: v.created_at,
+      account_id: v.account_id,
+      revision: v.revision,
+      tracking_start: v.tracking_start,
+      effective_date: v.effective_date,
+      limit_cents: v.limit_cents,
+      active: v.active,
+      statement_model: v.statement_model,
+      monthly_interest_rate: v.monthly_interest_rate,
+      contract_notes: v.contract_notes,
+      change_reason: v.change_reason,
+    })),
+    bank_reconciliations: (s.plan.bank_reconciliations ?? []).map((c) => ({
+      id: c.id,
+      created_at: c.created_at,
+      account_id: c.account_id,
+      statement_date: c.statement_date,
+      statement_balance_cents: c.statement_balance_cents,
+      calculated_balance_cents: c.calculated_balance_cents,
+      difference_cents: c.difference_cents,
+      evidence: c.evidence,
+      ledger_snapshot: {
+        initial_balance_cents: c.ledger_snapshot.initial_balance_cents,
+        transactions: c.ledger_snapshot.transactions.map((t) =>
+          pick(t as object, [
+            ...base,
+            "account_id",
+            "destination_account_id",
+            "category_id",
+            "type",
+            "amount_cents",
+            "adjustment_delta_cents",
+            "transaction_date",
+            "description",
+            "status",
+            "financial_charge",
+          ]),
+        ),
+      },
+    })),
     estimated: {
       as_of: asOf,
       wealth: {
@@ -441,6 +487,21 @@ export function buildFinancialExport(s: ExportSnapshot, o: ExportOptions) {
           "investment_id",
         ]),
         current_balance_cents: balance(a, s.finance.transactions, asOf),
+        overdraft:
+          a.type === "checking"
+            ? (() => {
+                const p = overdraftPosition(a, s.finance, s.plan, asOf);
+                return p.terms
+                  ? {
+                      state: p.state,
+                      active: p.terms.active,
+                      limit_cents: p.terms.limit_cents,
+                      used_cents: p.used,
+                      remaining_cents: p.remaining,
+                    }
+                  : null;
+              })()
+            : null,
       })),
     categories: s.finance.categories.map((c) =>
       pick(c, ["id", "name", "type"]),

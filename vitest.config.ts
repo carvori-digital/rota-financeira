@@ -14,6 +14,7 @@ export default defineConfig({
       "tests/adjust04-ui.test.tsx",
       "tests/hotfix-ui.test.tsx",
       "tests/subscriptions-ui.test.tsx",
+      "tests/overdraft-ui.test.tsx",
     ],
     clearMocks: true,
   },

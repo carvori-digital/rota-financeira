@@ -318,8 +318,9 @@ describe("experiência: relatórios, extrato e atualização", () => {
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     await waitFor(() =>
       expect(
-        screen.getByText("Saldo agora").parentElement?.querySelector("strong")
-          ?.textContent,
+        screen
+          .getByText("Posição líquida agora")
+          .parentElement?.querySelector("strong")?.textContent,
       ).toMatch(/175,00/),
     );
     expect(backend.rows.transactions).toHaveLength(1);
@@ -543,6 +544,8 @@ beforeEach(() => {
     transactions: [],
     goals: [],
     goal_contributions: [],
+    account_overdraft_versions: [],
+    bank_reconciliations: [],
     card_subscriptions: [],
     card_subscription_versions: [],
     card_subscription_occurrences: [],
@@ -569,7 +572,7 @@ beforeEach(() => {
 afterEach(cleanup);
 async function open() {
   render(<App />);
-  await screen.findByText("Saldo agora");
+  await screen.findByText("Posição líquida agora");
   return userEvent.setup();
 }
 describe("fluxos reais da interface com Supabase isolado de teste", () => {
@@ -607,7 +610,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Salvar senha", exact: true }),
     );
-    await screen.findByText("Saldo agora");
+    await screen.findByText("Posição líquida agora");
     expect(backend.authCalls[2]).toMatchObject({
       kind: "password",
       payload: { password: "new-fixture-password" },
@@ -625,9 +628,9 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Início", exact: true }),
     );
-    expect(screen.getByText("Livre no mês").textContent).toContain(
-      "Livre no mês",
-    );
+    expect(
+      screen.getByText("Posição prevista no fim do mês").textContent,
+    ).toContain("Posição prevista no fim do mês");
   });
   it("repetir após resposta perdida não duplica lançamento já gravado", async () => {
     const user = await open();
@@ -768,7 +771,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     backend.readError = true;
     render(<App />);
     await screen.findByRole("alert");
-    expect(screen.queryByText("Saldo agora")).toBeNull();
+    expect(screen.queryByText("Posição líquida agora")).toBeNull();
     expect(
       screen
         .getByRole("button", { name: "Novo", exact: true })
@@ -840,7 +843,7 @@ describe("fluxos reais da interface com Supabase isolado de teste", () => {
     await user.click(
       screen.getByRole("button", { name: "Entrar", exact: true }),
     );
-    await screen.findByText("Saldo agora");
+    await screen.findByText("Posição líquida agora");
   });
 });
 
@@ -899,8 +902,9 @@ describe("disponível, reserva e privacidade", () => {
     fixtures();
     const user = await open();
     expect(
-      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
-        ?.textContent,
+      screen
+        .getByText("Posição líquida agora")
+        .parentElement?.querySelector("strong")?.textContent,
     ).toMatch(/110,00/);
     expect(
       screen.getByText("Patrimônio bruto estimado").parentElement?.textContent,
@@ -916,8 +920,9 @@ describe("disponível, reserva e privacidade", () => {
     );
     await screen.findByText(/Salvo com sucesso/);
     expect(
-      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
-        ?.textContent,
+      screen
+        .getByText("Posição líquida agora")
+        .parentElement?.querySelector("strong")?.textContent,
     ).toMatch(/85,00/);
     expect(
       screen.getByText("Investimentos e reserva").parentElement?.textContent,
@@ -1022,7 +1027,7 @@ describe("disponível, reserva e privacidade", () => {
     );
     cleanup();
     render(<App />);
-    await screen.findByText("Saldo agora");
+    await screen.findByText("Posição líquida agora");
     expect(screen.getByRole("button", { name: "Exibir valores" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/R\$/);
     await user.click(screen.getByRole("button", { name: "Exibir valores" }));
@@ -1236,8 +1241,9 @@ describe("clareza financeira integrada", () => {
     ];
     const user = await open();
     expect(
-      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
-        ?.textContent,
+      screen
+        .getByText("Posição líquida agora")
+        .parentElement?.querySelector("strong")?.textContent,
     ).toMatch(/100,00/);
     await user.click(
       screen.getByRole("button", { name: "Planejar", exact: true }),
@@ -1271,8 +1277,9 @@ describe("clareza financeira integrada", () => {
       }),
     );
     expect(
-      screen.getByText("Saldo agora").parentElement?.querySelector("strong")
-        ?.textContent,
+      screen
+        .getByText("Posição líquida agora")
+        .parentElement?.querySelector("strong")?.textContent,
     ).toMatch(/90,00/);
     expect(
       backend.writes.filter((w) => w.rpc === "resolve_transaction"),

@@ -3,6 +3,7 @@ import type { PlanningData, Commitment, MonthProjection } from "./types.ts";
 import {
   balanceSummary,
   isReserveAccount,
+  isOperationalAccount,
   isRealized,
 } from "../../utils/finance.ts";
 import { addMonths } from "./dates.ts";
@@ -23,7 +24,7 @@ export function projection(
   const through = addMonths(`${asOf.slice(0, 7)}-01`, 3, 31);
   const all: Commitment[] = [];
   const cash = (id: string | null) =>
-    data.accounts.some((a) => a.id === id && !isReserveAccount(a));
+    data.accounts.some((a) => a.id === id && isOperationalAccount(a));
   for (const rule of plan.recurring_items)
     for (const due of recurringDates(
       rule,
@@ -150,7 +151,7 @@ export function projection(
         amount: i.amount,
         impact: cash(
           d.payment_account_id ??
-            data.accounts.find((a) => a.is_active && !isReserveAccount(a))
+            data.accounts.find((a) => a.is_active && isOperationalAccount(a))
               ?.id ??
             null,
         )

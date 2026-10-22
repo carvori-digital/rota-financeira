@@ -42,7 +42,7 @@ const fit = async (name) => {
 await mkdir("test-results/sprint03", { recursive: true });
 try {
   await page.goto("http://127.0.0.1:5177");
-  await page.getByText("Livre no mês", { exact: true }).waitFor();
+  await page.getByText("Posição prevista no fim do mês", { exact: true }).waitFor();
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Relatórios").click();

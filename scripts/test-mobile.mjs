@@ -21,6 +21,8 @@ const results = [],
   outbound = [];
 const query = async (sql, args = []) => (await db.query(sql, args)).rows;
 const names = new Set([
+  "account_overdraft_versions",
+  "bank_reconciliations",
   "accounts",
   "categories",
   "transactions",
@@ -191,6 +193,8 @@ try {
       if (parts.includes("rpc")) {
         assert.ok(
           [
+            "save_account_overdraft",
+            "record_bank_reconciliation",
             "save_card_subscription",
             "resolve_card_subscription",
             "set_card_invoice",
@@ -380,7 +384,7 @@ try {
     }
   }
   await page
-    .getByText("Livre no mês", { exact: true })
+    .getByText("Posição prevista no fim do mês", { exact: true })
     .waitFor({ timeout: 30000 });
   await nav("Planejar").click();
   await tab("Cartões").click();
@@ -632,7 +636,7 @@ try {
   await page
     .locator(".settings-account")
     .filter({ hasText: "Conta local" })
-    .locator("summary")
+    .locator(":scope > summary")
     .click();
   await page
     .locator(".settings-account")
@@ -663,14 +667,18 @@ try {
   await button("Configuração rápida").click();
   for (let i = 0; i < 6; i++) await button("Continuar / pular etapa").click();
   await button("Ver minha Home").click();
-  await page.getByText("Livre no mês", { exact: true }).waitFor();
+  await page
+    .getByText("Posição prevista no fim do mês", { exact: true })
+    .waitFor();
   results.push(
     "programada vencida não altera caixa; editar; confirmar uma vez; cancelar; parcela 8/14; ajuste negativo rastreável; configuração rápida",
   );
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Início").click();
-    await page.getByText("Livre no mês", { exact: true }).waitFor();
+    await page
+      .getByText("Posição prevista no fim do mês", { exact: true })
+      .waitFor();
     await fit(`${width}px Home`);
     await capture(`${width}-home`);
     await nav("Planejar").click();
@@ -728,7 +736,7 @@ try {
       .locator(".settings-account")
       .filter({ hasText: "Conta local" });
     if ((await accountSettings.getAttribute("open")) === null)
-      await accountSettings.locator("summary").click();
+      await accountSettings.locator(":scope > summary").click();
     await page
       .locator(".settings-account")
       .filter({ hasText: "Conta local" })
@@ -811,7 +819,7 @@ try {
     );
     await page.setViewportSize({ width, height: 844 });
     await page.reload();
-    await page.getByText("Saldo agora", { exact: true }).waitFor();
+    await page.getByText("Posição líquida agora", { exact: true }).waitFor();
     await nav("Planejar").click();
     await tab("Visão do mês").click();
     await page
@@ -974,14 +982,12 @@ try {
   );
   assert.equal(await actualCash(), subscriptionBankBefore);
   await tab("Cartões").click();
-  const subscriptionCardPanel = page
-    .locator("article")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Cartão de assinaturas local",
-        exact: true,
-      }),
-    });
+  const subscriptionCardPanel = page.locator("article").filter({
+    has: page.getByRole("heading", {
+      name: "Cartão de assinaturas local",
+      exact: true,
+    }),
+  });
   await subscriptionCardPanel
     .getByRole("button", { name: "Pagar fatura", exact: true })
     .click();
@@ -997,6 +1003,117 @@ try {
   );
   results.push(
     "subscription registration, future price, one-occurrence override, confirmed purchase and invoice payment use real isolated RPCs; forecasts never debit cash",
+  );
+
+  // Cheque especial: ordinary daily flows against the actual isolated ledger.
+  await nav("Carteira").click();
+  await tab("Contas").click();
+  await button("+ Criar").click();
+  await field("Nome").fill("Itaú cheque sintético");
+  await field("Saldo atual (R$)").fill("0,00");
+  await save();
+  const itau = (
+    await query("select id from accounts where name='Itaú cheque sintético'")
+  )[0].id;
+  const accountPanel = page
+    .locator("details.settings-account")
+    .filter({ hasText: "Itaú cheque sintético" });
+  await accountPanel.locator(":scope > summary").first().click();
+  await accountPanel
+    .getByRole("button", { name: "Habilitar cheque especial" })
+    .click();
+  await field("Limite contratado (R$)").fill("1000,00");
+  await field("Início do acompanhamento").fill(today);
+  await field("Representação no extrato").selectOption("negative_balance");
+  await field("Referência ou motivo da configuração").fill(
+    "Contrato sintético para validação",
+  );
+  await save();
+  await quick("Despesa");
+  await field("Conta").selectOption(itau);
+  await field("Categoria").selectOption(expense);
+  await field("Valor (R$)").fill("300,00");
+  await save();
+  const accountBalance = async () =>
+    Number(
+      (
+        await query(
+          "select a.initial_balance_cents+coalesce(sum(case when t.type='income' then t.amount_cents when t.type='adjustment' then t.adjustment_delta_cents else -t.amount_cents end),0) b from accounts a left join transactions t on t.account_id=a.id and t.status='realized' and t.transaction_date<=financial_date() where a.id=$1 group by a.id",
+          [itau],
+        )
+      )[0].b,
+    );
+  assert.equal(await accountBalance(), -30000);
+  await nav("Carteira").click();
+  await tab("Contas").click();
+  if (
+    !(await accountPanel
+      .locator(":scope > summary")
+      .first()
+      .evaluate((el) => el.parentElement.open))
+  )
+    await accountPanel.locator(":scope > summary").first().click();
+  await accountPanel.getByText("Em uso", { exact: true }).waitFor();
+  assert.equal(
+    await accountPanel.getByRole("progressbar").getAttribute("value"),
+    "30",
+  );
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await accountPanel.getByText("Histórico de utilização por data").click();
+    assert.equal(
+      (await accountPanel.innerText()).includes("[object Object]"),
+      false,
+    );
+    await fit(`${width}px cheque especial daily history`);
+    await capture(`overdraft-${width}`);
+    await accountPanel.getByText("Histórico de utilização por data").click();
+  }
+  await accountPanel
+    .getByRole("button", { name: "Conferir extrato bancário" })
+    .click();
+  await field("Saldo bancário no extrato (R$)").fill("-350,00");
+  await field("Referência do extrato e explicação").fill(
+    "Extrato sintético, diferença a investigar",
+  );
+  await button("Conferir diferença").click();
+  await page
+    .getByLabel("Conferi o extrato e confirmo o registro desta diferença")
+    .check();
+  await button("Confirmar conferência").click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  assert.equal(await accountBalance(), -30000);
+  assert.equal(
+    Number(
+      (
+        await query(
+          "select difference_cents from bank_reconciliations where account_id=$1",
+          [itau],
+        )
+      )[0].difference_cents,
+    ),
+    -5000,
+  );
+  await quick("Despesa");
+  await field("Conta").selectOption(itau);
+  await field("Categoria").selectOption(expense);
+  await field("Valor (R$)").fill("10,00");
+  await field("Identificação do encargo (opcional)").selectOption(
+    "overdraft_interest",
+  );
+  await save();
+  assert.equal(await accountBalance(), -31000);
+  await quick("Receita");
+  await field("Conta").selectOption(itau);
+  const incomeCat = (
+    await query("select id from categories where type='income' limit 1")
+  )[0].id;
+  await field("Categoria").selectOption(incomeCat);
+  await field("Valor (R$)").fill("200,00");
+  await save();
+  assert.equal(await accountBalance(), -11000);
+  results.push(
+    "overdraft configuration, debit crossing zero, derived usage, explicit non-mutating reconciliation, charged interest and receipt recovery through isolated RPCs",
   );
 
   await nav("Início").click();
@@ -1027,7 +1144,7 @@ try {
         errors,
         outbound,
         backend:
-          "PGlite com RLS authenticated e migrations 001–014; Auth e HTTP simulados; nenhum acesso remoto",
+          "PGlite com RLS authenticated e migrations 001–016; Auth e HTTP simulados; nenhum acesso remoto",
       },
       null,
       2,

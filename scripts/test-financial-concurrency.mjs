@@ -629,6 +629,216 @@ try {
   ])
     assert.equal((await q(cb, "select * from " + table)).length, 0);
   checks.push("RLS across simultaneous A/B sessions and replay keys");
+  const chronologyCard = (
+    await q(
+      c1,
+      "insert into credit_cards(name,closing_day,due_day) values('Ordem dos eventos',20,28) returning id",
+    )
+  )[0].id;
+  // Transaction begins before a concurrent purchase, but the baseline is saved
+  // afterwards: its coverage must include the now committed purchase.
+  await c1.query("begin");
+  await q(c2, "select create_card_purchase($1,$2)", [
+    id(),
+    {
+      card_id: chronologyCard,
+      category_id: cat,
+      amount_cents: 2000,
+      purchase_date: "2026-10-13",
+      installments: 1,
+    },
+  ]);
+  await q(
+    c1,
+    "select set_card_invoice($1,$2,10000,'2026-10-28','Extrato sintético')",
+    [id(), chronologyCard],
+  );
+  await c1.query("commit");
+  assert.equal(
+    Number(
+      (
+        await q(admin, "select invoice_total($1,'2026-10',$2) n", [
+          chronologyCard,
+          a,
+        ])
+      )[0].n,
+    ),
+    10000,
+  );
+  // Transaction begins before the baseline but creates a purchase afterwards:
+  // that purchase is additional and must not be silently swallowed.
+  await c1.query("begin");
+  await q(
+    c2,
+    "select set_card_invoice($1,$2,10000,'2026-10-28','Extrato sintético')",
+    [id(), chronologyCard],
+  );
+  await q(c1, "select create_card_purchase($1,$2)", [
+    id(),
+    {
+      card_id: chronologyCard,
+      category_id: cat,
+      amount_cents: 1500,
+      purchase_date: "2026-10-13",
+      installments: 1,
+    },
+  ]);
+  await c1.query("commit");
+  assert.equal(
+    Number(
+      (
+        await q(admin, "select invoice_total($1,'2026-10',$2) n", [
+          chronologyCard,
+          a,
+        ])
+      )[0].n,
+    ),
+    11500,
+  );
+  checks.push(
+    "card coverage and new purchase timestamps follow event order after the lock, not transaction start",
+  );
+  const overdraftAccount = (
+    await q(
+      c1,
+      "insert into accounts(name,type) values('Cheque sintético','checking') returning id",
+    )
+  )[0].id;
+  const overdraftConfigTerms = {
+    tracking_start: "2026-10-01",
+    effective_date: "2026-10-01",
+    limit_cents: 100000,
+    active: true,
+    statement_model: "negative_balance",
+    change_reason: "Contrato sintético",
+  };
+  const configure = (c, request, expected = null, extra = {}) =>
+    q(c, "select save_account_overdraft($1,$2,$3,$4)", [
+      request,
+      overdraftAccount,
+      expected,
+      { ...overdraftConfigTerms, ...extra },
+    ]);
+  const configRequest = id();
+  await race(
+    "same overdraft configuration retry preserves one immutable version",
+    [configure(c1, configRequest), configure(c2, configRequest)],
+    2,
+  );
+  assert.equal(
+    (
+      await q(
+        c1,
+        "select * from account_overdraft_versions where account_id=$1",
+        [overdraftAccount],
+      )
+    ).length,
+    1,
+  );
+  await race(
+    "competing overdraft limit versions reject stale expected revision",
+    [
+      configure(c1, id(), configRequest, {
+        effective_date: "2026-10-15",
+        limit_cents: 50000,
+      }),
+      configure(c2, id(), configRequest, {
+        effective_date: "2026-10-15",
+        limit_cents: 20000,
+      }),
+    ],
+    1,
+  );
+  const debit = {
+    type: "expense",
+    account_id: overdraftAccount,
+    category_id: cat,
+    amount_cents: 30000,
+    transaction_date: "2026-10-13",
+  };
+  await race(
+    "concurrent independent negative-balance debit and receipt preserve the algebraic ledger",
+    [
+      q(c1, "select create_financial_transaction($1,$2)", [id(), debit]),
+      q(c2, "select create_financial_transaction($1,$2)", [
+        id(),
+        { ...debit, type: "income", category_id: inc, amount_cents: 20000 },
+      ]),
+    ],
+    2,
+  );
+  const chargeRequest = id(),
+    charge = {
+      ...debit,
+      amount_cents: 1000,
+      financial_charge: "overdraft_interest",
+    };
+  await race(
+    "concurrent charged-interest retry creates one bank expense",
+    [
+      q(c1, "select create_financial_transaction($1,$2)", [
+        chargeRequest,
+        charge,
+      ]),
+      q(c2, "select create_financial_transaction($1,$2)", [
+        chargeRequest,
+        charge,
+      ]),
+    ],
+    2,
+  );
+  assert.equal(
+    Number(
+      (
+        await q(
+          c1,
+          "select sum(case when type='income' then amount_cents else -amount_cents end) n from transactions where account_id=$1",
+          [overdraftAccount],
+        )
+      )[0].n,
+    ),
+    -11000,
+  );
+  // A concurrent uncommitted historical entry must not contaminate the
+  // observation's captured ledger. Its later commit may change live history.
+  await c1.query("begin");
+  await q(c1, "select create_financial_transaction($1,$2)", [
+    id(),
+    { ...debit, amount_cents: 5000, transaction_date: "2026-10-01" },
+  ]);
+  const observation = id();
+  await q(
+    c2,
+    "select record_bank_reconciliation($1,$2,'2026-10-15',-16000,-11000,'Extrato sintético com conferência explícita',true)",
+    [observation, overdraftAccount],
+  );
+  await c1.query("commit");
+  const captured = (
+    await q(c2, "select * from bank_reconciliations where id=$1", [observation])
+  )[0];
+  assert.equal(Number(captured.calculated_balance_cents), -11000);
+  assert.equal(captured.ledger_snapshot.transactions.length, 3);
+  assert.equal(
+    Number(
+      (
+        await q(
+          c2,
+          "select sum(case when type='income' then amount_cents else -amount_cents end) n from transactions where account_id=$1",
+          [overdraftAccount],
+        )
+      )[0].n,
+    ),
+    -16000,
+  );
+  checks.push(
+    "reconciliation captures consistent committed evidence while retroactive entry is in flight",
+  );
+  await assert.rejects(configure(cb, id()));
+  for (const table of ["account_overdraft_versions", "bank_reconciliations"])
+    assert.equal((await q(cb, "select * from " + table)).length, 0);
+  checks.push(
+    "overdraft contract and reconciliation RLS across concurrent owners",
+  );
   const report = {
     passed: checks.length,
     checks,

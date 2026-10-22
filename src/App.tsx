@@ -1,3 +1,4 @@
+import { OverdraftPanel } from "./features/overdraft/OverdraftPanel";
 import { QuickInvestmentFlow } from "./features/investments/InvestmentOperations";
 import { useEffect, useRef, useState } from "react";
 import { MoneyInput } from "./components/MoneyInput";
@@ -419,6 +420,10 @@ export default function App() {
                 onGoals={() => setPage("goals")}
                 onReports={() => setPage("reports")}
                 onAccount={() => setEditor({ kind: "account" })}
+                onAccounts={() => {
+                  setWalletSection("accounts");
+                  setPage("wallet");
+                }}
               />
             )}
             {page === "history" && (
@@ -555,6 +560,16 @@ export default function App() {
                           {money(balance(a, data.transactions))}
                         </strong>
                       </summary>
+                      {a.type === "checking" && (
+                        <OverdraftPanel
+                          account={a}
+                          data={data}
+                          plan={planning.data}
+                          money={money}
+                          hidden={valuesHidden}
+                          onSaved={refresh}
+                        />
+                      )}
                       <div className="actions">
                         <button
                           onClick={() => setEditor({ kind: "account", row: a })}
@@ -1007,6 +1022,16 @@ function EditorForm({
       }
       if ("amount_cents" in payload && Number(payload.amount_cents) <= 0)
         throw new Error("Informe um valor maior que zero.");
+      if (editor.kind === "transaction" && type === "expense") {
+        payload.financial_charge = str("financial_charge") || null;
+        if (payload.financial_charge && recurring)
+          throw new Error(
+            "Registre encargos efetivamente cobrados sem recorrência automática.",
+          );
+      }
+      if (editor.kind === "transaction" && row)
+        payload.financial_charge =
+          type === "expense" ? str("financial_charge") || null : null;
       if (
         editor.kind === "transaction" &&
         type !== "transfer" &&
@@ -1282,6 +1307,22 @@ function EditorForm({
                 />
               </Field>
             </>
+          )}
+          {editor.kind === "transaction" && type === "expense" && (
+            <Field label="Identificação do encargo (opcional)">
+              <select
+                name="financial_charge"
+                defaultValue={transaction?.financial_charge ?? ""}
+              >
+                <option value="">Despesa comum</option>
+                <option value="overdraft_interest">
+                  Juros cobrados de cheque especial
+                </option>
+                <option value="overdraft_iof">
+                  IOF cobrado de cheque especial
+                </option>
+              </select>
+            </Field>
           )}
           {editor.kind === "transaction" && type !== "transfer" && (
             <>

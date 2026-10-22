@@ -6,7 +6,11 @@ import {
   occurrencePayments,
 } from "../recurring/calculations.ts";
 import { projection } from "./calculations.ts";
-import { isRealized, isReserveAccount } from "../../utils/finance.ts";
+import {
+  isRealized,
+  isReserveAccount,
+  isOperationalAccount,
+} from "../../utils/finance.ts";
 import { planningInvoices } from "../subscriptions/calculations.ts";
 
 export interface MonthlyCommitment extends Commitment {
@@ -131,7 +135,7 @@ export function monthlyCommitments(
         due: o.due_date,
         amount: expected,
         impact:
-          account && !isReserveAccount(account)
+          account && isOperationalAccount(account)
             ? Math.min(0, paid - expected)
             : 0,
         reserveAccount: !!account && isReserveAccount(account),
@@ -195,7 +199,7 @@ export function monthlyCommitments(
         impact:
           card.payment_account_id === null ||
           data.accounts.some(
-            (a) => a.id === card.payment_account_id && !isReserveAccount(a),
+            (a) => a.id === card.payment_account_id && isOperationalAccount(a),
           )
             ? -i.pending
             : 0,
@@ -270,7 +274,7 @@ export function monthlyCommitments(
         impact:
           d.payment_account_id === null ||
           data.accounts.some(
-            (a) => a.id === d.payment_account_id && !isReserveAccount(a),
+            (a) => a.id === d.payment_account_id && isOperationalAccount(a),
           )
             ? Math.min(0, paid - expected)
             : 0,

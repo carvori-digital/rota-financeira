@@ -80,7 +80,7 @@ try {
         throw e;
     }
   }
-  await page.getByText("Livre no mês", { exact: true }).waitFor();
+  await page.getByText("Posição prevista no fim do mês", { exact: true }).waitFor();
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Início").click();

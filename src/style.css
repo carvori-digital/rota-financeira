@@ -962,3 +962,63 @@ dialog > button {
   border-radius: 10px;
   font: inherit;
 }
+
+/* Credit is separate from own resources; warm usage indicator, never cash green. */
+.overdraft-panel {
+  padding: 12px 0;
+  border-top: 1px solid var(--border, #ddd);
+}
+.overdraft-panel h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+.overdraft-panel .section-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.overdraft-panel details {
+  margin: 12px 0;
+}
+.overdraft-panel summary {
+  min-height: 44px;
+  padding: 10px 0;
+}
+.overdraft-panel dd,
+.bank-summary dd {
+  overflow-wrap: anywhere;
+}
+.overdraft-panel .finance-details > div,
+.bank-summary .finance-details > div {
+  gap: 12px;
+}
+.overdraft-meter {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+}
+.overdraft-meter progress {
+  width: 100%;
+  height: 12px;
+  accent-color: #a85b18;
+}
+.overdraft-meter progress::-webkit-progress-value {
+  background: #a85b18;
+}
+.overdraft-history {
+  max-height: 360px;
+  overflow-y: auto;
+}
+.overdraft-history > div {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid #ddd;
+  padding: 10px 0;
+  font-size: 0.85rem;
+}
+.reconciliation-record {
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid #ddd;
+}
+.bank-summary > button {
+  margin-top: 12px;
+}

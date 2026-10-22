@@ -1,3 +1,4 @@
+import { bankingSummary } from "../overdraft/calculations.ts";
 import { cdiPosition } from "./cdi.ts";
 import type { CdiHistory } from "./cdi.ts";
 import type {
@@ -138,13 +139,16 @@ export function wealthSummary(
     asOf,
     false,
   ).reduce((s, i) => s + i.pending, 0);
-  const gross = cash.total + positions.reduce((s, p) => s + p.current, 0);
+  const bank = bankingSummary(data, plan, asOf);
+  const gross =
+    cash.total - bank.negative + positions.reduce((s, p) => s + p.current, 0);
   return {
     available: cash.available,
     invested,
     reserve,
     gross,
-    net: gross - debts - cards,
+    bank,
+    net: gross + bank.negative - debts - cards,
     debts,
     cards,
     positions,

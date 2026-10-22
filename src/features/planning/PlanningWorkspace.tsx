@@ -258,10 +258,12 @@ export function PlanningWorkspace(props: Props) {
                 <summary>Próximos meses</summary>
                 <>
                   <p className="muted">
-                    PREVISTO · quatro meses a partir do saldo disponível
-                    realizado. Vencidos ainda pendentes ficam no mês atual.
-                    Valores em contas de investimento/reserva aparecem nos
-                    compromissos, mas não alteram o disponível.
+                    PREVISTO · quatro meses a partir da posição bancária líquida
+                    realizada, incluindo os saldos negativos. Vencidos ainda
+                    pendentes ficam no mês atual. Valores em contas de
+                    investimento/reserva aparecem nos compromissos, mas não
+                    alteram essa posição. Limite de crédito não é receita
+                    prevista.
                   </p>
                   <ProjectionList
                     months={projection(data, plan, today())}
