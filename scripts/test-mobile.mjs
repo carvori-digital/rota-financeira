@@ -7,11 +7,19 @@ import { pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
-const { chromium } = await import(
+const engines = await import(
   process.env.PLAYWRIGHT_MODULE
     ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href
     : "playwright"
 );
+const engine = process.env.BROWSER_ENGINE === "webkit" ? "webkit" : "chromium";
+const insecure = process.env.TEST_INSECURE_HTTP === "1";
+const origin = insecure
+  ? "http://rota-insecure.test:5174"
+  : "http://127.0.0.1:5174";
+const directory = insecure
+  ? `test-results/insecure-http/integration-${engine}`
+  : "test-results/mobile";
 const db = new PGlite();
 let browser, server, activePage;
 const user = randomUUID(),
@@ -126,11 +134,18 @@ try {
     server: { host: "127.0.0.1", port: 5174, strictPort: true },
   });
   await server.listen();
-  browser = await chromium.launch({
+  browser = await engines[engine].launch({
     headless: true,
-    executablePath:
-      process.env.BROWSER_EXECUTABLE ??
-      "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    ...(engine === "chromium"
+      ? {
+          executablePath:
+            process.env.BROWSER_EXECUTABLE ??
+            (process.platform === "win32"
+              ? "C:/Program Files/Google/Chrome/Application/chrome.exe"
+              : "/usr/bin/chromium"),
+          args: ["--no-sandbox"],
+        }
+      : {}),
   });
   const context = await browser.newContext({
     viewport: { width: 375, height: 812 },
@@ -176,7 +191,11 @@ try {
   await context.route("**/*", async (route) => {
     const request = route.request(),
       url = new URL(request.url());
-    if (url.origin === "http://127.0.0.1:5174") return route.continue();
+    if (url.origin === origin) {
+      if (!insecure) return route.continue();
+      url.hostname = "127.0.0.1";
+      return route.fulfill({ response: await route.fetch({ url: url.href }) });
+    }
     if (url.origin !== api) {
       outbound.push(request.url());
       return route.abort();
@@ -353,9 +372,9 @@ try {
     await page.getByRole("dialog").waitFor({ state: "hidden" });
   };
   const capture = async (name) => {
-    await mkdir("test-results/mobile", { recursive: true });
+    await mkdir(directory, { recursive: true });
     await page.screenshot({
-      path: `test-results/mobile/${name}.png`,
+      path: `${directory}/${name}.png`,
       fullPage: true,
     });
   };
@@ -372,7 +391,7 @@ try {
   };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await page.goto("http://127.0.0.1:5174", {
+      await page.goto(origin, {
         waitUntil: "domcontentloaded",
         timeout: 60000,
       });
@@ -920,6 +939,18 @@ try {
     await capture(`${width}-hotfix-reserva-cemig`);
   }
 
+  const capabilities = await page.evaluate(() => ({
+    origin: location.origin,
+    isSecureContext,
+    randomUUID: typeof crypto.randomUUID,
+    getRandomValues: typeof crypto.getRandomValues,
+  }));
+  if (insecure) {
+    assert.equal(capabilities.isSecureContext, false);
+    assert.equal(capabilities.randomUUID, "undefined");
+    assert.equal(capabilities.getRandomValues, "function");
+  }
+
   // Subscription flow uses actual RPCs against this disposable PostgreSQL.
   const subscriptionBankBefore = await actualCash();
   await nav("Carteira").click();
@@ -938,6 +969,11 @@ try {
   await button("Adicionar assinatura").click();
   assert.equal(await field("Cartão").inputValue(), "");
   await field("Nome").fill("Assinatura local");
+  await button("Fechar").click();
+  assert.equal((await query("select id from card_subscriptions")).length, 0);
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Nome").inputValue(), "");
+  await field("Nome").fill("Assinatura local");
   await field("Cartão").selectOption(subscriptionCard);
   await field("Categoria").selectOption(expense);
   await field("Valor previsto (R$)").fill("20,00");
@@ -948,6 +984,13 @@ try {
   await save();
   assert.equal(await actualCash(), subscriptionBankBefore);
   const subscription = (await query("select id from card_subscriptions"))[0].id;
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Nome").inputValue(), "");
+  await button("Fechar").click();
+  assert.equal((await query("select id from card_subscriptions")).length, 1);
+  results.push(
+    "insecure HTTP subscription open, fill, discard, reopen, save and reopen again without duplicates",
+  );
   await button("Alterar próximas cobranças").click();
   const nextMonth = new Date(today + "T12:00:00Z");
   nextMonth.setUTCDate(1);
@@ -1136,9 +1179,11 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(outbound, []);
   await writeFile(
-    "test-results/mobile/report.json",
+    `${directory}/report.json`,
     JSON.stringify(
       {
+        engine,
+        capabilities,
         passed: results.length,
         checks: results,
         errors,
@@ -1153,20 +1198,22 @@ try {
   console.log(
     JSON.stringify(
       {
+        engine,
+        capabilities,
         passed: results.length,
         errors,
         outbound,
-        screenshots: "test-results/mobile",
+        screenshots: directory,
       },
       null,
       2,
     ),
   );
 } catch (error) {
-  await mkdir("test-results/mobile", { recursive: true });
+  await mkdir(directory, { recursive: true });
   if (activePage) {
     await activePage.screenshot({
-      path: "test-results/mobile/failure.png",
+      path: `${directory}/failure.png`,
       fullPage: true,
     });
     console.error(await activePage.locator("body").innerText());

@@ -4,6 +4,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    setupFiles: ["tests/insecure-crypto.setup.ts"],
     // Bound CPU contention in isolated audit/CI environments; keep test deadlines.
     pool: "threads",
     maxWorkers: 1,
@@ -15,6 +16,7 @@ export default defineConfig({
       "tests/hotfix-ui.test.tsx",
       "tests/subscriptions-ui.test.tsx",
       "tests/overdraft-ui.test.tsx",
+      "tests/error-boundary-ui.test.tsx",
     ],
     clearMocks: true,
   },

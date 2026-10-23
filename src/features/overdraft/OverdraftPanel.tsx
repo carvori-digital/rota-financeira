@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { createUuid } from "../../lib/uuid";
+import { useState } from "react";
 import type { Account, FinanceData } from "../../types";
 import type { PlanningData } from "../planning/types";
 import { Amount, Field, Modal, cents, text } from "../planning/ui";
@@ -253,7 +254,7 @@ function OverdraftConfig({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const id = useRef(crypto.randomUUID());
+  const [id] = useState(createUuid);
   const latest = (plan.account_overdraft_versions ?? [])
     .filter((v) => v.account_id === account.id)
     .sort((a, b) => b.revision - a.revision)[0];
@@ -263,7 +264,7 @@ function OverdraftConfig({
       onClose={onClose}
       onSubmit={async (f) => {
         await rpc("save_account_overdraft", {
-          p_id: id.current,
+          p_id: id,
           p_account: account.id,
           p_expected: latest?.id ?? null,
           p_payload: {
@@ -373,7 +374,7 @@ function ReconciliationEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const id = useRef(crypto.randomUUID());
+  const [id, setId] = useState(createUuid);
   const [date, setDate] = useState(today());
   const [review, setReview] = useState<{
     date: string;
@@ -398,7 +399,7 @@ function ReconciliationEditor({
           return false;
         }
         await rpc("record_bank_reconciliation", {
-          p_id: id.current,
+          p_id: id,
           p_account: account.id,
           p_date: review.date,
           p_statement: review.statement,
@@ -455,7 +456,7 @@ function ReconciliationEditor({
           <button
             type="button"
             onClick={() => {
-              id.current = crypto.randomUUID();
+              setId(createUuid());
               setReview(null);
             }}
           >

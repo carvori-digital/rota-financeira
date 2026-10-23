@@ -25,7 +25,10 @@ beforeAll(() => {
   vi.stubGlobal("matchMedia", () => ({ matches: true }));
 });
 beforeEach(() => mock.rpc.mockReset().mockResolvedValue("saved"));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 const month = today().slice(0, 7),
   chargeDate = `${month}-01`;
 const data: FinanceData = {
@@ -154,6 +157,72 @@ it("manual invoice requires explicit coverage when confirming; hidden amounts st
       p_purchase: null,
     }),
   );
+});
+it("closing discards the draft; reopening and saving creates fresh stable IDs", async () => {
+  const { user, saved } = view();
+  const open = () =>
+    user.click(screen.getByRole("button", { name: "Adicionar assinatura" }));
+  const fill = async () => {
+    await user.type(screen.getByLabelText("Nome"), "Assinatura HTTP sintética");
+    await user.selectOptions(screen.getByLabelText("Cartão"), "card");
+    await user.selectOptions(screen.getByLabelText("Categoria"), "expense");
+    await user.type(screen.getByLabelText("Valor previsto (R$)"), "2000");
+    await user.type(screen.getByLabelText("Dia habitual da cobrança"), "13");
+    await user.type(screen.getByLabelText("Data inicial"), chargeDate);
+  };
+  await open();
+  await fill();
+  await user.click(screen.getByRole("button", { name: "Fechar" }));
+  expect(mock.rpc).not.toHaveBeenCalled();
+  for (let i = 0; i < 2; i++) {
+    await open();
+    expect((screen.getByLabelText("Nome") as HTMLInputElement).value).toBe("");
+    await fill();
+    await user.click(
+      screen.getByRole("button", { name: "Salvar", exact: true }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  }
+  const first = mock.rpc.mock.calls[0][1],
+    second = mock.rpc.mock.calls[1][1];
+  const uuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  expect(first.p_request).toMatch(uuid);
+  expect(first.p_subscription).toMatch(uuid);
+  expect(
+    new Set([
+      first.p_request,
+      first.p_subscription,
+      second.p_request,
+      second.p_subscription,
+    ]).size,
+  ).toBe(4);
+  expect(saved).toHaveBeenCalledTimes(2);
+});
+it("a render failure gives feedback while keeping the subscriptions panel available", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const source = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
+    throw new Error("synthetic entropy failure");
+  });
+  const { user } = view();
+  await user.click(
+    screen.getByRole("button", { name: "Adicionar assinatura" }),
+  );
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Não foi possível abrir este formulário",
+  );
+  expect(
+    screen.getByRole("heading", { name: "Assinaturas no cartão" }),
+  ).toBeTruthy();
+  expect(mock.rpc).not.toHaveBeenCalled();
+  source.mockRestore();
+  await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
+  expect(
+    screen.getByRole("dialog", { name: "Adicionar assinatura no cartão" }),
+  ).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Fechar" }));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 it("linking requires a selected purchase ID and preserves the list context", async () => {
   const p = plan();

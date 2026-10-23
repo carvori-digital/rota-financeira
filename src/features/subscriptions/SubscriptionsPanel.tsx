@@ -1,4 +1,6 @@
+import { createUuid } from "../../lib/uuid";
 import { useState } from "react";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 import type { FinanceData } from "../../types";
 import type { PlanningData } from "../planning/types";
 import type { CardSubscription, SubscriptionCharge } from "./types";
@@ -196,20 +198,24 @@ export function SubscriptionsPanel({
         );
       })}
       {editor && (
-        <SubscriptionEditor
+        <ErrorBoundary
           key={
             editor.kind +
             (editor.kind === "subscription"
               ? (editor.subscription?.id ?? "new")
               : editor.charge.subscription_id + editor.charge.charge_month)
           }
-          editor={editor}
-          data={data}
-          plan={plan}
-          hidden={hidden}
           onClose={() => setEditor(null)}
-          onSaved={onSaved}
-        />
+        >
+          <SubscriptionEditor
+            editor={editor}
+            data={data}
+            plan={plan}
+            hidden={hidden}
+            onClose={() => setEditor(null)}
+            onSaved={onSaved}
+          />
+        </ErrorBoundary>
       )}
     </>
   );
@@ -229,8 +235,8 @@ function SubscriptionEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [request] = useState(() => crypto.randomUUID());
-  const [newId] = useState(() => crypto.randomUUID());
+  const [request] = useState(() => createUuid());
+  const [newId] = useState(() => createUuid());
   const [action, setAction] = useState("adjust");
   const s = editor.kind === "subscription" ? editor.subscription : undefined;
   const v = s && subscriptionVersion(plan, s.id);

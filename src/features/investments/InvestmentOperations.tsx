@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { createUuid } from "../../lib/uuid";
+import { useState } from "react";
 import type { FinanceData } from "../../types";
 import type { PlanningData } from "../planning/types";
 import type { Investment, InvestmentMovement } from "./types";
@@ -73,7 +74,7 @@ export function InvestmentMovementEditor({
   kind,
   ...props
 }: Props & { investment: Investment; kind: InvestmentOperation }) {
-  const request = useRef(crypto.randomUUID());
+  const [request] = useState(createUuid);
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [transfer, setTransfer] = useState("");
   const [distinct, setDistinct] = useState(false);
@@ -123,7 +124,7 @@ export function InvestmentMovementEditor({
               "Confirme que este movimento ainda não foi registrado.",
             );
           setPreview({
-            p_id: request.current,
+            p_id: request,
             p_investment: i.id,
             p_type: operation,
             p_amount: value,
@@ -389,7 +390,7 @@ export function DeleteInvestment({
   onSaved: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const request = useRef(crypto.randomUUID());
+  const [request] = useState(createUuid);
   const expected = recordedInvestmentValue(
     investment,
     plan.investment_movements ?? [],
@@ -415,7 +416,7 @@ export function DeleteInvestment({
                 "Confirme a exclusão e digite o nome do investimento.",
               );
             await rpc("delete_simple_investment", {
-              p_request: request.current,
+              p_request: request,
               p_investment: investment.id,
               p_expected: expected,
               p_confirmed: true,
@@ -460,7 +461,7 @@ export function ReverseInvestmentMovement({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const request = useRef(crypto.randomUUID());
+  const [request] = useState(createUuid);
   if (movement.reversed_by)
     return <small>Estornado · histórico preservado</small>;
   if (
@@ -483,7 +484,7 @@ export function ReverseInvestmentMovement({
           setError("");
           try {
             await rpc("reverse_simple_investment_movement", {
-              p_request: request.current,
+              p_request: request,
               p_movement: movement.id,
             });
             await onSaved();

@@ -1,7 +1,8 @@
+import { createUuid } from "../../lib/uuid";
 import { SubscriptionsPanel } from "../subscriptions/SubscriptionsPanel";
 import type { ReactNode } from "react";
 import { Investments } from "../investments/Investments";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { FinanceData, Transaction } from "../../types";
 import type { PlanningData, Commitment } from "./types";
 import type { CreditCard, InvoiceSummary, CardPurchase } from "../cards/types";
@@ -360,7 +361,7 @@ export function PlanningWorkspace(props: Props) {
                   onResolve={(r, date, skip) =>
                     void run(() =>
                       rpc("resolve_recurring", {
-                        p_id: crypto.randomUUID(),
+                        p_id: createUuid(),
                         p_rule: r.id,
                         p_due: date,
                         p_skip: skip,
@@ -388,7 +389,7 @@ export function PlanningWorkspace(props: Props) {
                             void run(() =>
                               rpc("repeat_transaction", {
                                 p_id: t.id,
-                                p_rule: crypto.randomUUID(),
+                                p_rule: createUuid(),
                                 p_existing: true,
                                 p_payload: {
                                   recurrence_frequency:
@@ -541,7 +542,7 @@ function PlanningEditor({
   onClose,
   setAction,
 }: Props & { action: PlanningAction; onClose: () => void }) {
-  const request = useRef(crypto.randomUUID()),
+  const [request] = useState(createUuid),
     [kind, setKind] = useState<"income" | "expense">(
       action.rule?.type ?? action.initialType ?? "expense",
     );
@@ -659,7 +660,7 @@ function PlanningEditor({
       if (value <= 0) throw new Error("Informe um valor maior que zero.");
       return value;
     };
-    const id = request.current;
+    const id = request;
     switch (action.kind) {
       case "occurrenceAmount":
         if (!rule || !action.due)

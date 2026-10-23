@@ -1,3 +1,4 @@
+import { createUuid } from "./lib/uuid";
 import { OverdraftPanel } from "./features/overdraft/OverdraftPanel";
 import { QuickInvestmentFlow } from "./features/investments/InvestmentOperations";
 import { useEffect, useRef, useState } from "react";
@@ -918,8 +919,8 @@ function EditorForm({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [closing, setClosing] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [draftId] = useState(() => crypto.randomUUID());
-  const [ruleId] = useState(() => crypto.randomUUID());
+  const [draftId] = useState(() => createUuid());
+  const [ruleId] = useState(() => createUuid());
   useEffect(() => {
     const d = dialogRef.current;
     d?.showModal();
