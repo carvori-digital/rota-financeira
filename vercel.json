@@ -35,7 +35,9 @@
   "git": {
     "deploymentEnabled": {
       "codex/hotfix-reserva-cemig": false,
-      "codex/auditoria-estrutural-financeira": false
+      "codex/auditoria-estrutural-financeira": false,
+      "codex/assinaturas-cartao-carteira": false,
+      "codex/cheque-especial-consolidado": false
     }
   }
 }

@@ -7,11 +7,19 @@ import { pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
-const { chromium } = await import(
+const engines = await import(
   process.env.PLAYWRIGHT_MODULE
     ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href
     : "playwright"
 );
+const engine = process.env.BROWSER_ENGINE === "webkit" ? "webkit" : "chromium";
+const insecure = process.env.TEST_INSECURE_HTTP === "1";
+const origin = insecure
+  ? "http://rota-insecure.test:5174"
+  : "http://127.0.0.1:5174";
+const directory = insecure
+  ? `test-results/insecure-http/integration-${engine}`
+  : "test-results/mobile";
 const db = new PGlite();
 let browser, server, activePage;
 const user = randomUUID(),
@@ -21,6 +29,8 @@ const results = [],
   outbound = [];
 const query = async (sql, args = []) => (await db.query(sql, args)).rows;
 const names = new Set([
+  "account_overdraft_versions",
+  "bank_reconciliations",
   "accounts",
   "categories",
   "transactions",
@@ -31,6 +41,9 @@ const names = new Set([
   "recurring_payments",
   "credit_cards",
   "card_purchases",
+  "card_subscriptions",
+  "card_subscription_versions",
+  "card_subscription_occurrences",
   "card_invoices",
   "card_payments",
   "debts",
@@ -56,7 +69,15 @@ const normalize = (rows) =>
         value instanceof Date
           ? value
               .toISOString()
-              .slice(0, key === "date" || key.endsWith("_date") ? 10 : 24)
+              .slice(
+                0,
+                key === "date" ||
+                  key.endsWith("_date") ||
+                  key === "charge_month" ||
+                  key === "effective_month"
+                  ? 10
+                  : 24,
+              )
           : key.endsWith("_cents") && value !== null
             ? Number(value)
             : value,
@@ -113,11 +134,18 @@ try {
     server: { host: "127.0.0.1", port: 5174, strictPort: true },
   });
   await server.listen();
-  browser = await chromium.launch({
+  browser = await engines[engine].launch({
     headless: true,
-    executablePath:
-      process.env.BROWSER_EXECUTABLE ??
-      "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    ...(engine === "chromium"
+      ? {
+          executablePath:
+            process.env.BROWSER_EXECUTABLE ??
+            (process.platform === "win32"
+              ? "C:/Program Files/Google/Chrome/Application/chrome.exe"
+              : "/usr/bin/chromium"),
+          args: ["--no-sandbox"],
+        }
+      : {}),
   });
   const context = await browser.newContext({
     viewport: { width: 375, height: 812 },
@@ -163,7 +191,11 @@ try {
   await context.route("**/*", async (route) => {
     const request = route.request(),
       url = new URL(request.url());
-    if (url.origin === "http://127.0.0.1:5174") return route.continue();
+    if (url.origin === origin) {
+      if (!insecure) return route.continue();
+      url.hostname = "127.0.0.1";
+      return route.fulfill({ response: await route.fetch({ url: url.href }) });
+    }
     if (url.origin !== api) {
       outbound.push(request.url());
       return route.abort();
@@ -180,6 +212,10 @@ try {
       if (parts.includes("rpc")) {
         assert.ok(
           [
+            "save_account_overdraft",
+            "record_bank_reconciliation",
+            "save_card_subscription",
+            "resolve_card_subscription",
             "set_card_invoice",
             "pay_card_invoice",
             "pay_debt",
@@ -272,8 +308,37 @@ try {
   page.setDefaultTimeout(10000);
   page.on("pageerror", (error) => errors.push(error.message));
   const nav = (name) =>
-    page.getByRole("navigation").getByRole("button", { name, exact: true });
-  const tab = (name) => page.getByRole("tab", { name, exact: true });
+    name === "Planejar"
+      ? {
+          click: async () => {
+            await page
+              .getByRole("navigation")
+              .getByRole("button", { name: "Início", exact: true })
+              .click();
+            await page
+              .getByRole("button", { name: "Planejar", exact: true })
+              .click();
+          },
+        }
+      : page.getByRole("navigation").getByRole("button", { name, exact: true });
+  const tab = (name) => ({
+    click: async () => {
+      if ((await page.getByRole("tab", { name, exact: true }).count()) === 0) {
+        await nav(
+          [
+            "Contas",
+            "Cartões",
+            "Assinaturas",
+            "Investimentos e reserva",
+            "Dívidas e parcelas",
+          ].includes(name)
+            ? "Carteira"
+            : "Planejar",
+        ).click();
+      }
+      await page.getByRole("tab", { name, exact: true }).click();
+    },
+  });
   const button = (name) => page.getByRole("button", { name, exact: true });
   const field = (label) => page.getByLabel(label, { exact: true });
   const save = async () => {
@@ -307,9 +372,9 @@ try {
     await page.getByRole("dialog").waitFor({ state: "hidden" });
   };
   const capture = async (name) => {
-    await mkdir("test-results/mobile", { recursive: true });
+    await mkdir(directory, { recursive: true });
     await page.screenshot({
-      path: `test-results/mobile/${name}.png`,
+      path: `${directory}/${name}.png`,
       fullPage: true,
     });
   };
@@ -326,7 +391,7 @@ try {
   };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await page.goto("http://127.0.0.1:5174", {
+      await page.goto(origin, {
         waitUntil: "domcontentloaded",
         timeout: 60000,
       });
@@ -338,7 +403,7 @@ try {
     }
   }
   await page
-    .getByText("Livre no mês", { exact: true })
+    .getByText("Posição prevista no fim do mês", { exact: true })
     .waitFor({ timeout: 30000 });
   await nav("Planejar").click();
   await tab("Cartões").click();
@@ -350,7 +415,7 @@ try {
   await fit("375px criar cartão");
   await capture("375-card-form");
   await save();
-  await button("Editar cartão").click();
+  await button("Editar cartão").first().click();
   await field("Nome").fill("Cartão editado");
   await save();
   assert.equal(
@@ -434,7 +499,7 @@ try {
       .length,
     1,
   );
-  await tab("Reserva e investimentos").click();
+  await tab("Investimentos e reserva").click();
   await button("Ajustar reserva").click();
   await field(
     "Custo essencial mensal (R$) · deixe vazio para usar sugestão",
@@ -586,10 +651,11 @@ try {
   await tab("Dívidas e parcelas").click();
   await page.getByText(/Parcela 8\/14/).waitFor();
   await nav("Ajustes").click();
+  await button("Gerenciar contas na Carteira").click();
   await page
     .locator(".settings-account")
     .filter({ hasText: "Conta local" })
-    .locator("summary")
+    .locator(":scope > summary")
     .click();
   await page
     .locator(".settings-account")
@@ -620,14 +686,18 @@ try {
   await button("Configuração rápida").click();
   for (let i = 0; i < 6; i++) await button("Continuar / pular etapa").click();
   await button("Ver minha Home").click();
-  await page.getByText("Livre no mês", { exact: true }).waitFor();
+  await page
+    .getByText("Posição prevista no fim do mês", { exact: true })
+    .waitFor();
   results.push(
     "programada vencida não altera caixa; editar; confirmar uma vez; cancelar; parcela 8/14; ajuste negativo rastreável; configuração rápida",
   );
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Início").click();
-    await page.getByText("Livre no mês", { exact: true }).waitFor();
+    await page
+      .getByText("Posição prevista no fim do mês", { exact: true })
+      .waitFor();
     await fit(`${width}px Home`);
     await capture(`${width}-home`);
     await nav("Planejar").click();
@@ -637,19 +707,19 @@ try {
       "Cartões",
       "Dívidas e parcelas",
       "Recorrentes",
-      "Reserva e investimentos",
+      "Investimentos e reserva",
     ]) {
       await tab(name).click();
       await fit(`${width}px ${name}`);
       await capture(
-        `${width}-${["Programadas", "Cartões", "Dívidas e parcelas", "Recorrentes", "Reserva e investimentos"].indexOf(name)}`,
+        `${width}-${["Programadas", "Cartões", "Dívidas e parcelas", "Recorrentes", "Investimentos e reserva"].indexOf(name)}`,
       );
     }
     await tab("Cartões").click();
     await button("Compra no cartão").click();
     await fit(`${width}px compra parcelada modal`);
     await button("Fechar").click();
-    await tab("Reserva e investimentos").click();
+    await tab("Investimentos e reserva").click();
     await button("Adicionar investimento").click();
     await fit(`${width}px investimento modal`);
     await capture(`${width}-investment-form`);
@@ -680,11 +750,12 @@ try {
     await capture(`${width}-delete-investment`);
     await button("Fechar").click();
     await nav("Ajustes").click();
+    await button("Gerenciar contas na Carteira").click();
     const accountSettings = page
       .locator(".settings-account")
       .filter({ hasText: "Conta local" });
     if ((await accountSettings.getAttribute("open")) === null)
-      await accountSettings.locator("summary").click();
+      await accountSettings.locator(":scope > summary").click();
     await page
       .locator(".settings-account")
       .filter({ hasText: "Conta local" })
@@ -767,7 +838,7 @@ try {
     );
     await page.setViewportSize({ width, height: 844 });
     await page.reload();
-    await page.getByText("Saldo agora", { exact: true }).waitFor();
+    await page.getByText("Posição líquida agora", { exact: true }).waitFor();
     await nav("Planejar").click();
     await tab("Visão do mês").click();
     await page
@@ -850,7 +921,7 @@ try {
       ),
       beforeSkip,
     );
-    await tab("Reserva e investimentos").click();
+    await tab("Investimentos e reserva").click();
     assert.equal(
       await page.getByText("Reserva hotfix excluída", { exact: true }).count(),
       0,
@@ -868,6 +939,226 @@ try {
     await capture(`${width}-hotfix-reserva-cemig`);
   }
 
+  const capabilities = await page.evaluate(() => ({
+    origin: location.origin,
+    isSecureContext,
+    randomUUID: typeof crypto.randomUUID,
+    getRandomValues: typeof crypto.getRandomValues,
+  }));
+  if (insecure) {
+    assert.equal(capabilities.isSecureContext, false);
+    assert.equal(capabilities.randomUUID, "undefined");
+    assert.equal(capabilities.getRandomValues, "function");
+  }
+
+  // Subscription flow uses actual RPCs against this disposable PostgreSQL.
+  const subscriptionBankBefore = await actualCash();
+  await nav("Carteira").click();
+  await tab("Cartões").click();
+  await button("Adicionar cartão").click();
+  await field("Nome").fill("Cartão de assinaturas local");
+  await field("Dia do fechamento").fill("20");
+  await field("Dia do vencimento").fill("28");
+  await save();
+  const subscriptionCard = (
+    await query(
+      "select id from credit_cards where name='Cartão de assinaturas local'",
+    )
+  )[0].id;
+  await tab("Assinaturas").click();
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Cartão").inputValue(), "");
+  await field("Nome").fill("Assinatura local");
+  await button("Fechar").click();
+  assert.equal((await query("select id from card_subscriptions")).length, 0);
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Nome").inputValue(), "");
+  await field("Nome").fill("Assinatura local");
+  await field("Cartão").selectOption(subscriptionCard);
+  await field("Categoria").selectOption(expense);
+  await field("Valor previsto (R$)").fill("20,00");
+  await field("Dia habitual da cobrança").fill(
+    String(Number(today.slice(8, 10))),
+  );
+  await field("Data inicial").fill(today);
+  await save();
+  assert.equal(await actualCash(), subscriptionBankBefore);
+  const subscription = (await query("select id from card_subscriptions"))[0].id;
+  await button("Adicionar assinatura").click();
+  assert.equal(await field("Nome").inputValue(), "");
+  await button("Fechar").click();
+  assert.equal((await query("select id from card_subscriptions")).length, 1);
+  results.push(
+    "insecure HTTP subscription open, fill, discard, reopen, save and reopen again without duplicates",
+  );
+  await button("Alterar próximas cobranças").click();
+  const nextMonth = new Date(today + "T12:00:00Z");
+  nextMonth.setUTCDate(1);
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  await field("Aplicar a partir do mês de cobrança").fill(
+    nextMonth.toISOString().slice(0, 7),
+  );
+  await field("Valor previsto (R$)").fill("25,00");
+  await save();
+  await button("Conferir cobrança").click();
+  await field("Valor previsto (R$)").fill("21,00");
+  await save();
+  await button("Conferir cobrança").click();
+  await field("Ação").selectOption("confirm");
+  await save();
+  assert.equal(
+    (
+      await query(
+        "select * from card_subscription_occurrences where subscription_id=$1",
+        [subscription],
+      )
+    )[0].status,
+    "confirmed",
+  );
+  assert.equal(
+    (
+      await query("select * from card_purchases where card_id=$1", [
+        subscriptionCard,
+      ])
+    ).length,
+    1,
+  );
+  assert.equal(await actualCash(), subscriptionBankBefore);
+  await tab("Cartões").click();
+  const subscriptionCardPanel = page.locator("article").filter({
+    has: page.getByRole("heading", {
+      name: "Cartão de assinaturas local",
+      exact: true,
+    }),
+  });
+  await subscriptionCardPanel
+    .getByRole("button", { name: "Pagar fatura", exact: true })
+    .click();
+  assert.equal(await field("Valor (R$)").inputValue(), "21,00");
+  await save();
+  assert.equal(await actualCash(), subscriptionBankBefore - 2100);
+  const confirmedLedger = await query("select * from transactions order by id");
+  await tab("Assinaturas").click();
+  await button("Conferir cobrança").waitFor({ state: "hidden" });
+  assert.deepEqual(
+    await query("select * from transactions order by id"),
+    confirmedLedger,
+  );
+  results.push(
+    "subscription registration, future price, one-occurrence override, confirmed purchase and invoice payment use real isolated RPCs; forecasts never debit cash",
+  );
+
+  // Cheque especial: ordinary daily flows against the actual isolated ledger.
+  await nav("Carteira").click();
+  await tab("Contas").click();
+  await button("+ Criar").click();
+  await field("Nome").fill("Itaú cheque sintético");
+  await field("Saldo atual (R$)").fill("0,00");
+  await save();
+  const itau = (
+    await query("select id from accounts where name='Itaú cheque sintético'")
+  )[0].id;
+  const accountPanel = page
+    .locator("details.settings-account")
+    .filter({ hasText: "Itaú cheque sintético" });
+  await accountPanel.locator(":scope > summary").first().click();
+  await accountPanel
+    .getByRole("button", { name: "Habilitar cheque especial" })
+    .click();
+  await field("Limite contratado (R$)").fill("1000,00");
+  await field("Início do acompanhamento").fill(today);
+  await field("Representação no extrato").selectOption("negative_balance");
+  await field("Referência ou motivo da configuração").fill(
+    "Contrato sintético para validação",
+  );
+  await save();
+  await quick("Despesa");
+  await field("Conta").selectOption(itau);
+  await field("Categoria").selectOption(expense);
+  await field("Valor (R$)").fill("300,00");
+  await save();
+  const accountBalance = async () =>
+    Number(
+      (
+        await query(
+          "select a.initial_balance_cents+coalesce(sum(case when t.type='income' then t.amount_cents when t.type='adjustment' then t.adjustment_delta_cents else -t.amount_cents end),0) b from accounts a left join transactions t on t.account_id=a.id and t.status='realized' and t.transaction_date<=financial_date() where a.id=$1 group by a.id",
+          [itau],
+        )
+      )[0].b,
+    );
+  assert.equal(await accountBalance(), -30000);
+  await nav("Carteira").click();
+  await tab("Contas").click();
+  if (
+    !(await accountPanel
+      .locator(":scope > summary")
+      .first()
+      .evaluate((el) => el.parentElement.open))
+  )
+    await accountPanel.locator(":scope > summary").first().click();
+  await accountPanel.getByText("Em uso", { exact: true }).waitFor();
+  assert.equal(
+    await accountPanel.getByRole("progressbar").getAttribute("value"),
+    "30",
+  );
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await accountPanel.getByText("Histórico de utilização por data").click();
+    assert.equal(
+      (await accountPanel.innerText()).includes("[object Object]"),
+      false,
+    );
+    await fit(`${width}px cheque especial daily history`);
+    await capture(`overdraft-${width}`);
+    await accountPanel.getByText("Histórico de utilização por data").click();
+  }
+  await accountPanel
+    .getByRole("button", { name: "Conferir extrato bancário" })
+    .click();
+  await field("Saldo bancário no extrato (R$)").fill("-350,00");
+  await field("Referência do extrato e explicação").fill(
+    "Extrato sintético, diferença a investigar",
+  );
+  await button("Conferir diferença").click();
+  await page
+    .getByLabel("Conferi o extrato e confirmo o registro desta diferença")
+    .check();
+  await button("Confirmar conferência").click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  assert.equal(await accountBalance(), -30000);
+  assert.equal(
+    Number(
+      (
+        await query(
+          "select difference_cents from bank_reconciliations where account_id=$1",
+          [itau],
+        )
+      )[0].difference_cents,
+    ),
+    -5000,
+  );
+  await quick("Despesa");
+  await field("Conta").selectOption(itau);
+  await field("Categoria").selectOption(expense);
+  await field("Valor (R$)").fill("10,00");
+  await field("Identificação do encargo (opcional)").selectOption(
+    "overdraft_interest",
+  );
+  await save();
+  assert.equal(await accountBalance(), -31000);
+  await quick("Receita");
+  await field("Conta").selectOption(itau);
+  const incomeCat = (
+    await query("select id from categories where type='income' limit 1")
+  )[0].id;
+  await field("Categoria").selectOption(incomeCat);
+  await field("Valor (R$)").fill("200,00");
+  await save();
+  assert.equal(await accountBalance(), -11000);
+  results.push(
+    "overdraft configuration, debit crossing zero, derived usage, explicit non-mutating reconciliation, charged interest and receipt recovery through isolated RPCs",
+  );
+
   await nav("Início").click();
   await button("Ocultar valores").click();
   assert.equal(
@@ -879,7 +1170,7 @@ try {
   );
   await nav("Planejar").click();
   await tab("Cartões").click();
-  await button("Editar cartão").click();
+  await button("Editar cartão").first().click();
   assert.equal(
     await field("Limite (R$) · opcional").getAttribute("type"),
     "password",
@@ -888,15 +1179,17 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(outbound, []);
   await writeFile(
-    "test-results/mobile/report.json",
+    `${directory}/report.json`,
     JSON.stringify(
       {
+        engine,
+        capabilities,
         passed: results.length,
         checks: results,
         errors,
         outbound,
         backend:
-          "PGlite com RLS authenticated e migrations 001–014; Auth e HTTP simulados; nenhum acesso remoto",
+          "PGlite com RLS authenticated e migrations 001–016; Auth e HTTP simulados; nenhum acesso remoto",
       },
       null,
       2,
@@ -905,20 +1198,22 @@ try {
   console.log(
     JSON.stringify(
       {
+        engine,
+        capabilities,
         passed: results.length,
         errors,
         outbound,
-        screenshots: "test-results/mobile",
+        screenshots: directory,
       },
       null,
       2,
     ),
   );
 } catch (error) {
-  await mkdir("test-results/mobile", { recursive: true });
+  await mkdir(directory, { recursive: true });
   if (activePage) {
     await activePage.screenshot({
-      path: "test-results/mobile/failure.png",
+      path: `${directory}/failure.png`,
       fullPage: true,
     });
     console.error(await activePage.locator("body").innerText());

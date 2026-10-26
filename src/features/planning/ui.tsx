@@ -112,9 +112,14 @@ export function Modal({
     [closing, setClosing] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
-    ref.current?.showModal();
+    const dialog = ref.current;
+    const trigger = document.activeElement;
+    dialog?.showModal();
     return () => {
       if (timer.current) clearTimeout(timer.current);
+      dialog?.close?.();
+      if (trigger instanceof HTMLElement && trigger.isConnected)
+        trigger.focus({ preventScroll: true });
     };
   }, []);
   function close(action = onClose) {
@@ -287,7 +292,7 @@ export function QuickActions({
           )}
           {payment && !invoices.length && (
             <p className="muted">
-              Sem faturas pendentes. Cartões ficam em Planejar.
+              Sem faturas confirmadas pendentes. Cartões ficam na Carteira.
             </p>
           )}
           <button

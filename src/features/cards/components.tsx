@@ -4,7 +4,8 @@ import { Status } from "../planning/ui";
 import { DeleteRecord } from "../planning/DeleteRecord";
 import type { CreditCard, InvoiceSummary, CardPurchase } from "./types";
 import { addMonths } from "../planning/dates";
-import { invoices, purchaseInstallments } from "./calculations";
+import { purchaseInstallments } from "./calculations";
+import { planningInvoices } from "../subscriptions/calculations";
 import { displayDate, today } from "../../utils/finance";
 export function CardsPanel({
   plan,
@@ -29,13 +30,7 @@ export function CardsPanel({
   onSaved: () => Promise<void>;
   onAdjustPurchase: (p: CardPurchase) => void;
 }) {
-  const bills = invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
-    plan.card_payments,
-    plan.card_adjustments,
-  );
+  const bills = planningInvoices(plan, plan.card_payments, today());
   const hasPayment = (purchase: CardPurchase) =>
     purchaseInstallments(purchase).some((i) =>
       plan.card_payments.some(
@@ -95,7 +90,7 @@ export function CardsPanel({
               </dd>
             </div>
             <div>
-              <dt>Futuro já contratado</dt>
+              <dt>Faturas futuras e previsões</dt>
               <dd>
                 {money(
                   bills
@@ -124,7 +119,12 @@ export function CardsPanel({
             kind="card"
             id={c.id}
             onSaved={onSaved}
-            explanation="Somente cartões sem compras, faturas ou pagamentos podem ser excluídos."
+            blocked={
+              plan.card_subscription_versions?.some((v) => v.card_id === c.id)
+                ? "Cartão vinculado ao histórico de assinaturas. Use Arquivar para preservá-lo."
+                : undefined
+            }
+            explanation="Somente cartões sem compras, faturas, pagamentos ou assinaturas podem ser excluídos."
           />
           {bills
             .filter((i) => i.card_id === c.id)
@@ -154,7 +154,14 @@ export function CardsPanel({
                 <small>
                   Total {money(i.total)} · pago {money(i.paid)}
                 </small>
-                {i.pending > 0 && (
+                {!!i.forecast && (
+                  <small>
+                    Inclui {money(i.forecast)} em assinaturas previstas.
+                    Confirme as cobranças em Carteira → Assinaturas antes de
+                    pagar essa parcela.
+                  </small>
+                )}
+                {(i.payable ?? i.pending) > 0 && (
                   <button className="primary" onClick={() => onPay(c, i)}>
                     Pagar fatura
                   </button>
@@ -175,7 +182,12 @@ export function CardsPanel({
                     <>
                       <div className="actions">
                         <button
-                          disabled={hasPayment(p)}
+                          disabled={
+                            hasPayment(p) ||
+                            plan.card_subscription_occurrences?.some(
+                              (o) => o.purchase_id === p.id,
+                            )
+                          }
                           onClick={() => onEditPurchase(p)}
                         >
                           Editar compra
@@ -197,9 +209,13 @@ export function CardsPanel({
                     id={p.id}
                     onSaved={onSaved}
                     blocked={
-                      hasPayment(p)
-                        ? "Esta compra está ligada a uma fatura com pagamento. Use um ajuste de fatura para corrigir."
-                        : undefined
+                      plan.card_subscription_occurrences?.some(
+                        (o) => o.purchase_id === p.id,
+                      )
+                        ? "Compra vinculada a uma assinatura. Use um ajuste de fatura para corrigir."
+                        : hasPayment(p)
+                          ? "Esta compra está ligada a uma fatura com pagamento. Use um ajuste de fatura para corrigir."
+                          : undefined
                     }
                   />
                   <small>

@@ -67,6 +67,13 @@ export function isLegacyReserveAccount(account: Account) {
     isReserveAccount(account)
   );
 }
+export function isOperationalAccount(account: Account) {
+  return (
+    !account.investment_id &&
+    !account.investment_retired &&
+    ["checking", "wallet", "other"].includes(account.type)
+  );
+}
 export function balanceSummary(
   accounts: Account[],
   transactions: Transaction[],

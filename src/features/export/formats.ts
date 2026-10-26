@@ -97,6 +97,45 @@ export function financialCsv(r: FinancialExport): string {
       "resumo",
       "",
     );
+  for (const [label, value] of Object.entries({
+    "Recursos em contas positivas": r.banking.positive,
+    "Saldos bancários negativos": r.banking.negative,
+    "Posição bancária líquida": r.banking.net,
+    "Crédito adicional disponível (não é patrimônio)":
+      r.banking.additionalCredit,
+  }))
+    add(
+      r.estimated.as_of,
+      label,
+      "posicao_bancaria",
+      "",
+      value,
+      "POSICAO",
+      "bancos",
+      "",
+    );
+  for (const v of r.overdraft_versions)
+    add(
+      v.effective_date,
+      `Limite contratado · ${v.change_reason}`,
+      "limite_credito",
+      "",
+      v.limit_cents,
+      v.active ? "ATIVO" : "INATIVO",
+      "account_overdraft_versions",
+      `${v.id}|conta:${v.account_id}`,
+    );
+  for (const c of r.bank_reconciliations)
+    add(
+      c.statement_date,
+      c.evidence,
+      "diferenca_conciliacao",
+      "",
+      c.difference_cents,
+      "CONFERENCIA_SEM_CAIXA",
+      "bank_reconciliations",
+      `${c.id}|conta:${c.account_id}`,
+    );
   for (const m of r.projected.months)
     add(
       m.month,
@@ -137,7 +176,7 @@ export function financialCsv(r: FinancialExport): string {
       add(
         t.transaction_date,
         t.description,
-        t.type,
+        t.financial_charge || t.type,
         r.categories.find((c) => c.id === t.category_id)?.name ??
           "Sem categoria",
         t.amount_cents,
@@ -270,7 +309,10 @@ export async function financialPdf(r: FinancialExport): Promise<Blob> {
   line("Posição atual / ESTIMADA", true);
   pair("Dívidas e parcelas restantes", r.estimated.wealth.debts_cents);
   pair("Cartões / faturas pendentes", r.estimated.wealth.cards_cents);
-  pair("Disponível", r.estimated.wealth.available_cents);
+  pair("Recursos em contas positivas", r.banking.positive);
+  pair("Saldos bancários negativos", r.banking.negative);
+  pair("Posição bancária líquida", r.banking.net);
+  pair("Crédito adicional (não é patrimônio)", r.banking.additionalCredit);
   pair("Investimentos (inclui reserva)", r.estimated.wealth.invested_cents);
   pair("Reserva de emergência", r.estimated.reserve_cents);
   pair("Patrimônio bruto", r.estimated.wealth.gross_cents);
@@ -297,6 +339,15 @@ export async function financialPdf(r: FinancialExport): Promise<Blob> {
     `Poupança média observada em meses completos: ${r.indicators.observed_savings_cents === null ? "indisponível" : money(r.indicators.observed_savings_cents)}`,
   );
   line("Projeção futura (PROJETADO)", true);
+  line("Contratos e conferências (sem movimentação bancária)", true);
+  for (const v of r.overdraft_versions)
+    line(
+      `${v.effective_date} | Conta: ${v.account_id} | Limite: ${money(v.limit_cents)} | ${v.active ? "Ativo" : "Inativo"} | ${v.change_reason}`,
+    );
+  for (const c of r.bank_reconciliations)
+    line(
+      `${c.statement_date} | Conta: ${c.account_id} | Extrato: ${money(c.statement_balance_cents)} | Calculado: ${money(c.calculated_balance_cents)} | Diferença: ${money(c.difference_cents)} | ${c.evidence} | Ref.: ${c.id}`,
+    );
   for (const m of r.projected.months)
     line(
       `${m.month} | Entradas: ${money(m.income)} | Saídas: ${money(m.commitments)} | Saldo: ${money(m.closing)}`,
@@ -305,7 +356,7 @@ export async function financialPdf(r: FinancialExport): Promise<Blob> {
     line("Movimentações detalhadas", true);
     for (const t of r.details.transactions)
       line(
-        `${t.transaction_date} | ${t.description} | ${t.type} | ${t.status ?? "realized"} | ${money(Number(t.amount_cents))} | Ref.: ${t.id}`,
+        `${t.transaction_date} | ${t.description} | ${t.financial_charge || t.type} | ${t.status ?? "realized"} | ${money(Number(t.amount_cents))} | Ref.: ${t.id}`,
       );
     for (const t of r.details.card_purchases)
       line(

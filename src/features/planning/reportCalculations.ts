@@ -1,6 +1,6 @@
 import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData, Commitment } from "./types.ts";
-import { isRealized, isReserveAccount } from "../../utils/finance.ts";
+import { isRealized, isOperationalAccount } from "../../utils/finance.ts";
 import { monthlyCommitments } from "./commitments.ts";
 import { projection, realized } from "./calculations.ts";
 export const commitmentGroups = {
@@ -31,7 +31,7 @@ export function monthReport(
   const months = projection(data, plan, asOf),
     current = months[0];
   const cash = (id: string) =>
-    data.accounts.some((a) => a.id === id && !isReserveAccount(a));
+    data.accounts.some((a) => a.id === id && isOperationalAccount(a));
   const paidItems = data.transactions.filter(
     (t) =>
       isRealized(t, asOf) &&

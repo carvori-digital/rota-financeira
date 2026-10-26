@@ -80,7 +80,7 @@ try {
         throw e;
     }
   }
-  await page.getByText("Livre no mês", { exact: true }).waitFor();
+  await page.getByText("Posição prevista no fim do mês", { exact: true }).waitFor();
   for (const width of [375, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await nav("Início").click();
@@ -146,14 +146,13 @@ try {
         .innerText(),
       projected,
     );
-    await nav("Planejar").click();
+    await nav("Início").click();
+    await button("Planejar").click();
     for (const title of [
       "Visão do mês",
-      "Cartões",
-      "Dívidas e parcelas",
+
       "Recorrentes",
       "Programadas",
-      "Reserva e investimentos",
       "Metas",
     ]) {
       await page.getByRole("tab", { name: title, exact: true }).click();
@@ -166,6 +165,18 @@ try {
       await fit(`${width}px record actions ${title}`);
     }
     await capture(`${width}-goals`);
+    await nav("Carteira").click();
+    for (const title of [
+      "Contas",
+      "Cartões",
+      "Assinaturas",
+      "Investimentos e reserva",
+      "Dívidas e parcelas",
+    ]) {
+      await page.getByRole("tab", { name: title, exact: true }).click();
+      await fit(`${width}px Wallet ${title}`);
+    }
+
     await nav("Ajustes").click();
     assert.equal(await page.locator(".settings-account[open]").count(), 0);
     assert.equal(await page.locator(".settings-section[open]").count(), 0);
@@ -176,6 +187,7 @@ try {
     );
     await fit(`${width}px compact settings`);
     await capture(`${width}-settings`);
+    await button("Gerenciar contas na Carteira").click();
     await page.locator(".settings-account summary").first().click();
     assert.equal(
       await page
@@ -183,6 +195,7 @@ try {
         .count(),
       1,
     );
+    await nav("Ajustes").click();
     await page.getByText(/^Categorias ·/).click();
     await fit(`${width}px expanded settings`);
     await capture(`${width}-settings-expanded`);
@@ -227,12 +240,12 @@ try {
     assert.equal(await page.locator(".chart-fill,progress").count(), 0);
     await fit(`Hidden ${name}`);
   }
-  await nav("Planejar").click();
+  await nav("Carteira").click();
   for (const title of [
     "Cartões",
     "Dívidas e parcelas",
-    "Reserva e investimentos",
-    "Metas",
+    "Investimentos e reserva",
+    "Assinaturas",
   ]) {
     await page.getByRole("tab", { name: title, exact: true }).click();
     assert.ok(!(await page.locator("main").innerText()).includes("R$"));

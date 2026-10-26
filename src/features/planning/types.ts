@@ -19,6 +19,11 @@ export interface ReserveLink extends Base {
   account_id: string;
 }
 export interface PlanningData {
+  account_overdraft_versions?: import("../overdraft/types.ts").OverdraftVersion[];
+  bank_reconciliations?: import("../overdraft/types.ts").BankReconciliation[];
+  card_subscriptions?: import("../subscriptions/types.ts").CardSubscription[];
+  card_subscription_versions?: import("../subscriptions/types.ts").SubscriptionVersion[];
+  card_subscription_occurrences?: import("../subscriptions/types.ts").SubscriptionOccurrence[];
   investment_reconstructions?: import("../investments/types.ts").InvestmentReconstruction[];
   investment_rates?: InvestmentRate[];
   cdi_history?: import("../investments/cdi.ts").CdiHistory | null;
@@ -39,6 +44,11 @@ export interface PlanningData {
   reserve_account_links: ReserveLink[];
 }
 export const emptyPlanning: PlanningData = {
+  account_overdraft_versions: [],
+  bank_reconciliations: [],
+  card_subscriptions: [],
+  card_subscription_versions: [],
+  card_subscription_occurrences: [],
   investment_reconstructions: [],
   investment_rates: [],
   investments: [],

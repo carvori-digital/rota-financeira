@@ -1,3 +1,4 @@
+import { createUuid } from "../../lib/uuid";
 import { useRef, useState } from "react";
 import type { Investment } from "./types";
 import type { PlanningData } from "../planning/types";
@@ -66,10 +67,10 @@ export function ReconstructInvestment({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const ids = useRef({
-    request: crypto.randomUUID(),
-    investment: crypto.randomUUID(),
-  });
+  const [ids] = useState(() => ({
+    request: createUuid(),
+    investment: createUuid(),
+  }));
   const [review, setReview] = useState<Record<string, unknown> | null>(null);
   const [net, setNet] = useState(0),
     [target, setTarget] = useState(0);
@@ -118,9 +119,9 @@ export function ReconstructInvestment({
             "Confirme as diferenças e que os movimentos históricos já foram contabilizados.",
           );
         await rpc("reconstruct_investment", {
-          p_id: ids.current.request,
+          p_id: ids.request,
           p_old: i.id,
-          p_new: ids.current.investment,
+          p_new: ids.investment,
           p_expected: old.current,
           p_payload: review,
         });

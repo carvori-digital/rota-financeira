@@ -1,6 +1,8 @@
+import { createUuid } from "../../lib/uuid";
+import { SubscriptionsPanel } from "../subscriptions/SubscriptionsPanel";
 import type { ReactNode } from "react";
 import { Investments } from "../investments/Investments";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { FinanceData, Transaction } from "../../types";
 import type { PlanningData, Commitment } from "./types";
 import type { CreditCard, InvoiceSummary, CardPurchase } from "../cards/types";
@@ -12,7 +14,8 @@ import { rpc, save } from "./queries";
 import { CardsPanel } from "../cards/components";
 import { DebtsPanel } from "../debts/components";
 import { RecurringPanel } from "../recurring/components";
-import { firstInvoiceDate, invoices } from "../cards/calculations";
+import { firstInvoiceDate } from "../cards/calculations";
+import { planningInvoices } from "../subscriptions/calculations";
 import { monthDay } from "./dates";
 import {
   balance,
@@ -53,6 +56,9 @@ export type PlanningAction = {
   rule?: RecurringItem;
 };
 interface Props {
+  area?: "wallet" | "planning";
+  accountsContent?: ReactNode;
+  onBack?: () => void;
   data: FinanceData;
   plan: PlanningData;
   money: Money;
@@ -71,6 +77,9 @@ export function PlanningWorkspace(props: Props) {
   const {
     data,
     plan,
+    area = "planning",
+    accountsContent,
+    onBack,
     money,
     hidden,
     visible,
@@ -118,22 +127,32 @@ export function PlanningWorkspace(props: Props) {
     <>
       {visible && (
         <section className="planning-workspace">
-          <h1>Planejar</h1>
+          <h1>{area === "wallet" ? "Carteira" : "Planejar meu mês"}</h1>
+          {area === "planning" && (
+            <button className="text-link" onClick={onBack}>
+              Voltar ao Início
+            </button>
+          )}
           <div
             className="planning-tabs"
             role="tablist"
-            aria-label="Planejamento"
+            aria-label={area === "wallet" ? "Carteira" : "Planejamento"}
           >
-            {[
-              ["month", "Visão do mês"],
-
-              ["cards", "Cartões"],
-              ["debts", "Dívidas e parcelas"],
-              ["recurring", "Recorrentes"],
-              ["scheduled", "Programadas"],
-              ["reserve", "Reserva e investimentos"],
-              ["goals", "Metas"],
-            ].map(([key, label]) => (
+            {(area === "wallet"
+              ? [
+                  ["accounts", "Contas"],
+                  ["cards", "Cartões"],
+                  ["subscriptions", "Assinaturas"],
+                  ["reserve", "Investimentos e reserva"],
+                  ["debts", "Dívidas e parcelas"],
+                ]
+              : [
+                  ["month", "Visão do mês"],
+                  ["recurring", "Recorrentes"],
+                  ["scheduled", "Programadas"],
+                  ["goals", "Metas"],
+                ]
+            ).map(([key, label]) => (
               <button
                 role="tab"
                 id={`tab-${key}`}
@@ -155,6 +174,16 @@ export function PlanningWorkspace(props: Props) {
             key={section}
             aria-busy={busy}
           >
+            {section === "accounts" && accountsContent}
+            {section === "subscriptions" && (
+              <SubscriptionsPanel
+                data={data}
+                plan={plan}
+                money={money}
+                hidden={hidden}
+                onSaved={onSaved}
+              />
+            )}
             {section === "month" && (
               <>
                 <MonthReport
@@ -230,10 +259,12 @@ export function PlanningWorkspace(props: Props) {
                 <summary>Próximos meses</summary>
                 <>
                   <p className="muted">
-                    PREVISTO · quatro meses a partir do saldo disponível
-                    realizado. Vencidos ainda pendentes ficam no mês atual.
-                    Valores em contas de investimento/reserva aparecem nos
-                    compromissos, mas não alteram o disponível.
+                    PREVISTO · quatro meses a partir da posição bancária líquida
+                    realizada, incluindo os saldos negativos. Vencidos ainda
+                    pendentes ficam no mês atual. Valores em contas de
+                    investimento/reserva aparecem nos compromissos, mas não
+                    alteram essa posição. Limite de crédito não é receita
+                    prevista.
                   </p>
                   <ProjectionList
                     months={projection(data, plan, today())}
@@ -330,7 +361,7 @@ export function PlanningWorkspace(props: Props) {
                   onResolve={(r, date, skip) =>
                     void run(() =>
                       rpc("resolve_recurring", {
-                        p_id: crypto.randomUUID(),
+                        p_id: createUuid(),
                         p_rule: r.id,
                         p_due: date,
                         p_skip: skip,
@@ -358,7 +389,7 @@ export function PlanningWorkspace(props: Props) {
                             void run(() =>
                               rpc("repeat_transaction", {
                                 p_id: t.id,
-                                p_rule: crypto.randomUUID(),
+                                p_rule: createUuid(),
                                 p_existing: true,
                                 p_payload: {
                                   recurrence_frequency:
@@ -511,7 +542,7 @@ function PlanningEditor({
   onClose,
   setAction,
 }: Props & { action: PlanningAction; onClose: () => void }) {
-  const request = useRef(crypto.randomUUID()),
+  const [request] = useState(createUuid),
     [kind, setKind] = useState<"income" | "expense">(
       action.rule?.type ?? action.initialType ?? "expense",
     );
@@ -538,12 +569,10 @@ function PlanningEditor({
     plan.debt_payments.some((p) => p.debt_id === action.debt?.id);
   const reserveGoal = data.goals.find((g) => g.is_emergency_reserve),
     reserveAccounts = data.accounts.filter(isLegacyReserveAccount);
-  const currentInvoice = invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
+  const currentInvoice = planningInvoices(
+    plan,
     plan.card_payments,
-    plan.card_adjustments,
+    today(),
   ).find((i) => i.card_id === cardId && i.month === today().slice(0, 7));
   const title = {
     installment: "Cadastrar parcelamento existente",
@@ -631,7 +660,7 @@ function PlanningEditor({
       if (value <= 0) throw new Error("Informe um valor maior que zero.");
       return value;
     };
-    const id = request.current;
+    const id = request;
     switch (action.kind) {
       case "occurrenceAmount":
         if (!rule || !action.due)
@@ -701,7 +730,7 @@ function PlanningEditor({
       case "purchase":
         if (!card)
           throw new Error(
-            "Adicione um cartão em Planejar antes de registrar a compra.",
+            "Adicione um cartão na Carteira antes de registrar a compra.",
           );
         {
           const payload = {
@@ -1118,7 +1147,10 @@ function PlanningEditor({
       {action.kind === "cardPayment" && (
         <>
           {accountSelect("account", card?.payment_account_id)}
-          <Amount hidden={hidden} value={action.invoice?.pending} />
+          <Amount
+            hidden={hidden}
+            value={action.invoice?.payable ?? action.invoice?.pending}
+          />
           {date("date", today(), "Data do pagamento", today())}
           <p className="muted">
             Reduz conta e fatura pendente. Não conta novamente como despesa de

@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { createUuid } from "../../lib/uuid";
+import { useState } from "react";
 import type { Account, FinanceData, Transaction } from "../../types";
 import { balance, today, money, displayDate } from "../../utils/finance";
 import { Amount, Field, Modal, cents, text } from "./ui";
@@ -20,7 +21,7 @@ export function FinancialActions({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const id = useRef(crypto.randomUUID());
+  const [id] = useState(createUuid);
   const t = action.kind !== "adjust" ? action.transaction : undefined;
   const [type, setType] = useState<"income" | "expense">(
     t?.type === "income" ? "income" : "expense",
@@ -60,7 +61,7 @@ export function FinancialActions({
               "Confirme a revisão dos movimentos antes do ajuste.",
             );
           await rpc("reconcile_operational_balance", {
-            p_id: id.current,
+            p_id: id,
             p_account: action.account.id,
             p_target: target,
             p_expected: recorded,
@@ -76,7 +77,7 @@ export function FinancialActions({
           if (amount <= 0) throw new Error("Informe um valor maior que zero.");
           await save(
             "transactions",
-            t?.id ?? id.current,
+            t?.id ?? id,
             {
               type,
               amount_cents: amount,

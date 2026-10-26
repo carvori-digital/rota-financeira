@@ -37,6 +37,7 @@ export function Dashboard({
   onGoals,
   onReports,
   onAccount,
+  onAccounts,
 }: {
   data: FinanceData;
   plan: PlanningData;
@@ -49,6 +50,7 @@ export function Dashboard({
   onGoals: () => void;
   onReports: () => void;
   onAccount: () => void;
+  onAccounts?: () => void;
 }) {
   const asOf = today(),
     r = experienceReport(data, plan, asOf);
@@ -77,14 +79,14 @@ export function Dashboard({
         </button>
       </div>
       <section className="balance month-hero">
-        <span>Livre no mês</span>
+        <span>Posição prevista no fim do mês</span>
         <h2>{money(r.current.closing)}</h2>
         <small>
           <Status state="forecast" /> · fechamento do mês
         </small>
         <div className="balance-secondary">
-          <div aria-label="Saldo disponível">
-            <span>Saldo agora</span>
+          <div aria-label="Posição bancária líquida">
+            <span>Posição líquida agora</span>
             <strong>{money(balances.available)}</strong>
           </div>
           <div>
@@ -98,6 +100,38 @@ export function Dashboard({
         </div>
         {!data.accounts.length && (
           <button onClick={onAccount}>Criar primeira conta</button>
+        )}
+      </section>
+      <section
+        className="panel bank-summary"
+        aria-label="Posição bancária consolidada"
+      >
+        <dl className="finance-details">
+          <div>
+            <dt>Recursos em contas positivas</dt>
+            <dd>{money(r.wealth.bank.positive)}</dd>
+          </div>
+          <div>
+            <dt>Saldos bancários negativos</dt>
+            <dd>{money(r.wealth.bank.negative)}</dd>
+          </div>
+          <div className="finance-total">
+            <dt>Posição bancária líquida</dt>
+            <dd>{money(r.wealth.bank.net)}</dd>
+          </div>
+          <div>
+            <dt>Crédito adicional disponível</dt>
+            <dd>{money(r.wealth.bank.additionalCredit)}</dd>
+          </div>
+        </dl>
+        <small>
+          Crédito separado do dinheiro próprio, da reserva e do patrimônio.
+          {r.wealth.bank.unreconciled > 0
+            ? " Há limites a conciliar não incluídos no crédito disponível."
+            : ""}
+        </small>
+        {onAccounts && (
+          <button onClick={onAccounts}>Detalhar contas na Carteira</button>
         )}
       </section>
       <MonthlyProgress
@@ -265,8 +299,9 @@ export function Dashboard({
             </div>
           ))}
         <small>
-          Patrimônio líquido: contas e investimentos menos dívidas e faturas
-          pendentes.
+          Patrimônio bruto: ativos positivos e investimentos. Patrimônio
+          líquido: bruto menos saldos bancários negativos, dívidas e faturas
+          pendentes. Cheque especial é descontado uma vez.
         </small>
       </details>
     </div>

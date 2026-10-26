@@ -35,6 +35,8 @@ export interface CardPayment extends Base {
   payment_date: string;
 }
 export interface InvoiceSummary {
+  forecast?: number;
+  payable?: number;
   card_id: string;
   month: string;
   due_date: string;

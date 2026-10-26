@@ -1,3 +1,4 @@
+import { bankingSummary } from "../overdraft/calculations.ts";
 import { cdiPosition } from "./cdi.ts";
 import type { CdiHistory } from "./cdi.ts";
 import type {
@@ -9,7 +10,7 @@ import type { FinanceData } from "../../types/index.ts";
 import type { PlanningData } from "../planning/types.ts";
 import { balanceSummary } from "../../utils/finance.ts";
 import { verifiedCardPayments } from "../cards/verifiedPayments.ts";
-import { invoices } from "../cards/calculations.ts";
+import { planningInvoices } from "../subscriptions/calculations.ts";
 export function recordedInvestmentValue(
   investment: Investment,
   movements: InvestmentMovement[],
@@ -126,20 +127,28 @@ export function wealthSummary(
     .filter((p) => p.investment.is_emergency_reserve)
     .reduce((s, p) => s + p.current, 0);
   const debts = plan.debts.reduce((s, d) => s + d.remaining_amount_cents, 0);
-  const cards = invoices(
-    plan.credit_cards,
-    plan.card_purchases.filter((p) => p.purchase_date <= asOf),
-    plan.card_invoices,
+  const cards = planningInvoices(
+    {
+      ...plan,
+      card_purchases: plan.card_purchases.filter(
+        (p) => p.purchase_date <= asOf,
+      ),
+    },
     verifiedCardPayments(data.transactions, plan.card_payments, asOf),
-    plan.card_adjustments,
+    asOf,
+    asOf,
+    false,
   ).reduce((s, i) => s + i.pending, 0);
-  const gross = cash.total + positions.reduce((s, p) => s + p.current, 0);
+  const bank = bankingSummary(data, plan, asOf);
+  const gross =
+    cash.total - bank.negative + positions.reduce((s, p) => s + p.current, 0);
   return {
     available: cash.available,
     invested,
     reserve,
     gross,
-    net: gross - debts - cards,
+    bank,
+    net: gross + bank.negative - debts - cards,
     debts,
     cards,
     positions,

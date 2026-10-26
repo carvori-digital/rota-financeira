@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { createUuid } from "../../lib/uuid";
+import { useState } from "react";
 import type { FinanceData } from "../../types";
 import type { PlanningData } from "../planning/types";
 import type { Investment } from "./types";
@@ -354,7 +355,7 @@ function InvestmentEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const id = useRef(crypto.randomUUID()),
+  const [id] = useState(createUuid),
     i = action.investment;
   const title =
     action.kind === "edit"
@@ -374,7 +375,7 @@ function InvestmentEditor({
       onSubmit={async (f) => {
         if (action.kind === "edit" && !i) {
           await rpc("create_simple_investment", {
-            p_id: id.current,
+            p_id: id,
             p_payload: {
               name: text(f, "name"),
               institution: text(f, "institution"),
@@ -390,7 +391,7 @@ function InvestmentEditor({
         } else if (action.kind === "edit")
           await save(
             "investments",
-            i?.id ?? id.current,
+            i?.id ?? id,
             {
               name: text(f, "name"),
               institution: text(f, "institution"),
@@ -409,14 +410,14 @@ function InvestmentEditor({
           );
         else if (action.kind === "rate")
           await rpc("append_investment_rate", {
-            p_id: id.current,
+            p_id: id,
             p_investment: i!.id,
             p_date: text(f, "date"),
             p_percent: Number(text(f, "rate").replace(",", ".")),
           });
         else
           await rpc("record_investment_movement", {
-            p_id: id.current,
+            p_id: id,
             p_investment: i!.id,
             p_type: action.kind,
             p_amount: cents(f),

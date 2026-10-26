@@ -6,8 +6,12 @@ import {
   occurrencePayments,
 } from "../recurring/calculations.ts";
 import { projection } from "./calculations.ts";
-import { isRealized, isReserveAccount } from "../../utils/finance.ts";
-import { invoices } from "../cards/calculations.ts";
+import {
+  isRealized,
+  isReserveAccount,
+  isOperationalAccount,
+} from "../../utils/finance.ts";
+import { planningInvoices } from "../subscriptions/calculations.ts";
 
 export interface MonthlyCommitment extends Commitment {
   status: "pending" | "completed";
@@ -131,7 +135,7 @@ export function monthlyCommitments(
         due: o.due_date,
         amount: expected,
         impact:
-          account && !isReserveAccount(account)
+          account && isOperationalAccount(account)
             ? Math.min(0, paid - expected)
             : 0,
         reserveAccount: !!account && isReserveAccount(account),
@@ -181,13 +185,7 @@ export function monthlyCommitments(
       p.payment_date <= asOf
     );
   });
-  for (const i of invoices(
-    plan.credit_cards,
-    plan.card_purchases,
-    plan.card_invoices,
-    payments,
-    plan.card_adjustments,
-  )) {
+  for (const i of planningInvoices(plan, payments, asOf)) {
     if (i.total <= 0) continue;
     const card = plan.credit_cards.find((c) => c.id === i.card_id)!;
     put(
@@ -201,12 +199,13 @@ export function monthlyCommitments(
         impact:
           card.payment_account_id === null ||
           data.accounts.some(
-            (a) => a.id === card.payment_account_id && !isReserveAccount(a),
+            (a) => a.id === card.payment_account_id && isOperationalAccount(a),
           )
             ? -i.pending
             : 0,
         direction: "expense",
         group: "cards",
+        canResolve: (i.payable ?? i.pending) > 0,
       },
       i.paid,
       payments
@@ -275,7 +274,7 @@ export function monthlyCommitments(
         impact:
           d.payment_account_id === null ||
           data.accounts.some(
-            (a) => a.id === d.payment_account_id && !isReserveAccount(a),
+            (a) => a.id === d.payment_account_id && isOperationalAccount(a),
           )
             ? Math.min(0, paid - expected)
             : 0,

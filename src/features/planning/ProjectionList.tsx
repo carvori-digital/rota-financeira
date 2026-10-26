@@ -38,7 +38,7 @@ export function ProjectionList({
               <dd>{money(m.other)}</dd>
             </div>
             <div>
-              <dt>Transferências (efeito no disponível)</dt>
+              <dt>Transferências (efeito na posição líquida)</dt>
               <dd>{money(m.transfers)}</dd>
             </div>
             <div>
@@ -46,7 +46,7 @@ export function ProjectionList({
               <dd>{money(m.commitments)}</dd>
             </div>
             <div className="finance-total">
-              <dt>Saldo projetado final</dt>
+              <dt>Posição bancária líquida projetada</dt>
               <dd>{money(m.closing)}</dd>
             </div>
           </dl>

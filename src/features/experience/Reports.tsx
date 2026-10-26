@@ -208,8 +208,9 @@ export function Reports({
         <details>
           <summary>Como chegamos ao saldo?</summary>
           <p className="muted">
-            Disponível realizado, mais entradas previstas, menos compromissos.
-            Reserva e investimentos ficam separados do dinheiro livre.
+            Posição bancária líquida realizada, mais entradas previstas, menos
+            compromissos. Crédito não utilizado fica fora da projeção. Reserva e
+            investimentos ficam separados do dinheiro livre.
           </p>
           {r.months.map((m) => (
             <div key={m.month} className="projection-detail">
@@ -315,7 +316,21 @@ export function Reports({
         <h2>Patrimônio e investimentos</h2>
         <dl className="finance-details">
           <div>
-            <dt>Disponível</dt>
+            <dt>Recursos em contas positivas</dt>
+            <dd>{money(r.wealth.bank.positive)}</dd>
+          </div>
+          <div>
+            <dt>Saldos bancários negativos</dt>
+            <dd>{money(r.wealth.bank.negative)}</dd>
+          </div>
+          <div>
+            <dt>Crédito adicional disponível · não é patrimônio</dt>
+            <dd>{money(r.wealth.bank.additionalCredit)}</dd>
+          </div>
+        </dl>
+        <dl className="finance-details">
+          <div>
+            <dt>Posição bancária líquida</dt>
             <dd>{money(r.wealth.available)}</dd>
           </div>
           <div>

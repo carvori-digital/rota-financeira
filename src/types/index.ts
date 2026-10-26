@@ -19,6 +19,7 @@ export interface Category extends Base {
   type: "income" | "expense";
 }
 export interface Transaction extends Base {
+  financial_charge?: "overdraft_interest" | "overdraft_iof" | null;
   financial_commitment?: boolean;
   commitment_due_date?: string | null;
   status?: "realized" | "pending" | "cancelled";

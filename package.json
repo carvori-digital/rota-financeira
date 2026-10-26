@@ -11,10 +11,10 @@
     "test": "npm run test:unit && npm run test:db && npm run test:ui",
     "test:isolation": "node scripts/test-isolation.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 42817 --strictPort",
-    "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs tests/consolidation-database.test.mjs tests/record-management.test.mjs tests/sprint03-database.test.mjs tests/adjust04-database.test.mjs tests/hotfix-database.test.mjs tests/structural-database.test.mjs",
+    "test:db": "node --test tests/database.test.mjs tests/planning-database.test.mjs tests/consolidation-database.test.mjs tests/record-management.test.mjs tests/sprint03-database.test.mjs tests/adjust04-database.test.mjs tests/hotfix-database.test.mjs tests/structural-database.test.mjs tests/subscriptions-database.test.mjs tests/overdraft-database.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts",
     "format": "prettier --write .",
-    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts tests/consolidation.test.ts tests/commitments.test.ts tests/cdi.test.ts tests/export.test.ts tests/hotfix.test.ts tests/structural.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/finance.test.ts tests/planning.test.ts tests/pwa.test.ts tests/experience.test.ts tests/consolidation.test.ts tests/commitments.test.ts tests/cdi.test.ts tests/export.test.ts tests/hotfix.test.ts tests/structural.test.ts tests/overdraft.test.ts tests/uuid.test.ts",
     "test:live": "node --experimental-strip-types scripts/test-live.mjs",
     "test:mobile": "node scripts/test-mobile.mjs",
     "validate:remote-data": "node scripts/remote-baseline.mjs",
@@ -24,7 +24,9 @@
     "snapshot:records": "node --experimental-strip-types scripts/snapshot-consolidation.mjs",
     "audit:records": "node scripts/record-management-audit.mjs",
     "test:sprint03-mobile": "node scripts/test-sprint03-mobile.mjs",
-    "test:audit:concurrency": "node scripts/test-financial-concurrency.mjs"
+    "test:audit:concurrency": "node scripts/test-financial-concurrency.mjs",
+    "test:insecure-http": "node scripts/test-insecure-http.mjs",
+    "test:subscriptions:mobile": "node scripts/test-subscriptions-mobile.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
